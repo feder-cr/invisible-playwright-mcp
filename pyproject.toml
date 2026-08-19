@@ -8,10 +8,19 @@ version = "0.1.0"
 description = "Stealth Firefox browser as an MCP server for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
 authors = [{ name = "feder-cr", email = "85809106+feder-cr@users.noreply.github.com" }]
+keywords = ["mcp", "playwright", "firefox", "stealth", "anti-detect", "browser-automation", "ai-agent"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "mcp>=1.2",
-    "invisible-playwright",
+    "invisible-playwright>=0.7.1",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +28,10 @@ test = ["pytest>=8", "pytest-asyncio>=0.23"]
 
 [project.scripts]
 invisible-playwright-mcp = "invisible_playwright_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/feder-cr/invisible-playwright-mcp"
+Repository = "https://github.com/feder-cr/invisible-playwright-mcp"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/invisible_playwright_mcp"]
