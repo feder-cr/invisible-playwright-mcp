@@ -74,9 +74,17 @@ class _AlreadyPoisoned:
         pass
 
 
+class _ConnectedBrowser:
+    """`_ensure_session` asks a live browser whether it is still connected, so
+    a stand-in without that method is indistinguishable from a dead one."""
+
+    def is_connected(self):
+        return True
+
+
 class _Healthy:
     def __init__(self):
-        self._browser = object()
+        self._browser = _ConnectedBrowser()
         self._context = object()
         self.started = False
 

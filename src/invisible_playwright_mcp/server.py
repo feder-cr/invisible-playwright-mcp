@@ -42,26 +42,36 @@ mcp = FastMCP("stealth", lifespan=_lifespan)
 
 
 async def _ensure_session() -> StealthSession:
-    """One session per server, and a FAILED start must not poison the next call.
+    """One session per server, kept only while it is actually usable.
 
-    This used to assign the global BEFORE awaiting `start()`. A start that
-    raised - a stale INVISIBLE_SEAL_FILE and a proxy that is down are the two
-    easy ways to get one - left a half-built object behind. Every later call
-    then found a non-None `_session`, skipped the start, and died on
-    `'NoneType' object has no attribute ...`, which names nothing and cannot be
-    recovered without restarting the server. For a stdio server that is the
-    whole conversation gone, over a condition the operator could have fixed in
-    ten seconds if the error had said what it was.
+    Two failures are handled here, and they are different:
 
-    So the session is built and started locally, and only one that actually
-    started is kept. And a session already in that state repairs itself rather
-    than requiring a restart: the process that has the defect is exactly the one
-    you notice it in, and there a fix that ships later never arrives. A session
-    with no browser is not a session; it is thrown away and made again.
+    * A session whose browser has DIED under it. The object is intact, so
+      nothing raises until a tool touches the page, and then it raises
+      somewhere unhelpful. Checked up front instead.
+    * A start that FAILED. This used to assign the global before awaiting
+      `start()`, so a start that raised left a half-built object behind, and
+      every later call found a non-None `_session`, skipped the start, and died
+      on `'NoneType' object has no attribute ...` - an error that names nothing
+      and, on a stdio server, ends the whole conversation. The two ways to hit
+      it are ordinary: a stale INVISIBLE_SEAL_FILE, and a proxy that is down
+      when the first tool runs. Both take ten seconds to fix if the message
+      says what happened.
+
+    So: an unusable session is dropped before use, and a session is stored only
+    once it has actually started.
     """
     global _session
-    if _session is not None and getattr(_session, "_browser", None) is None             and getattr(_session, "_context", None) is None:
-        _session = None
+    if _session is not None:
+        try:
+            if _session._browser is not None and not _session._browser.is_connected():
+                await _session.close()
+                _session = None
+            elif _session._context is None:
+                _session = None
+        except Exception:
+            _session = None
+
     if _session is None:
         session = StealthSession()
         await session.start()
@@ -71,7 +81,14 @@ async def _ensure_session() -> StealthSession:
 
 @mcp.tool()
 async def session_new_page() -> str:
-    return await (await _ensure_session()).new_page()
+    s = await _ensure_session()
+    try:
+        return await s.new_page()
+    except Exception:
+        global _session
+        _session = None
+        s = await _ensure_session()
+        return await s.new_page()
 
 
 @mcp.tool()
@@ -93,10 +110,17 @@ async def session_close_page(page_id: str = "") -> str:
 
 @mcp.tool()
 async def browser_navigate(url: str, wait_until: str = "domcontentloaded") -> str:
-    s = await _ensure_session()
-    if not s.list_pages():
+    global _session
+    try:
+        s = await _ensure_session()
+        if not s.list_pages():
+            await s.new_page()
+        await s.page().goto(url, wait_until=wait_until, timeout=45_000)
+    except Exception:
+        _session = None
+        s = await _ensure_session()
         await s.new_page()
-    await s.page().goto(url, wait_until=wait_until, timeout=45_000)
+        await s.page().goto(url, wait_until=wait_until, timeout=45_000)
     return f"navigated to {url}"
 
 
@@ -112,31 +136,80 @@ async def browser_read_text(selector: str = "body", max_chars: int = 6000) -> st
 
 @mcp.tool()
 async def browser_snapshot(max_chars: int = 6000) -> str:
+    """Title, url, and the interactive elements that are actually visible.
+
+    Not the accessibility tree, and the reason is measured rather than
+    aesthetic: on a real sign-up page a single country `<select>` contributes
+    about two hundred `<option>` nodes, which fill the character cap before the
+    form the caller was looking for appears at all. Filtering to elements a
+    caller can act on - and to `offsetParent !== null`, so hidden ones do not
+    count - keeps the answer about the page rather than about its longest
+    dropdown.
+    """
     s = await _ensure_session()
-    return _json_capped(await s.page().accessibility.snapshot(), limit=max_chars)
+    dom_summary = await s.page().evaluate("""() => {
+        const inputs = Array.from(document.querySelectorAll('input, button, select, textarea, a')).map(el => ({
+            tag: el.tagName.toLowerCase(),
+            type: el.type || undefined,
+            name: el.name || undefined,
+            id: el.id || undefined,
+            placeholder: el.placeholder || undefined,
+            text: (el.innerText || el.value || '').trim().slice(0, 50),
+            visible: el.offsetParent !== null
+        })).filter(x => x.visible);
+        return { title: document.title, url: location.href, interactive_elements: inputs };
+    }""")
+    return _json_capped(dom_summary, limit=max_chars)
 
 
 @mcp.tool()
 async def browser_click(selector: str) -> str:
-    await (await _ensure_session()).page().click(selector, timeout=15_000)
+    s = await _ensure_session()
+    await s.page().click(selector, timeout=15_000)
     return f"clicked {selector}"
 
 
 @mcp.tool()
+async def browser_click_at(x: float, y: float, hold_seconds: float = 0.0) -> Image:
+    """Click (or press-and-hold) a raw viewport coordinate instead of a
+    selector - for targets a selector can't reliably reach: a slider track,
+    a canvas-drawn captcha, or a precise point inside a wider element. Moves
+    the pointer there first (no teleport), then down, then - if hold_seconds
+    is 0 - immediately up (a plain click); otherwise waits hold_seconds
+    before releasing (a press-and-hold, e.g. PerimeterX's 'press & hold').
+    Returns a screenshot taken right after release, so the result of the
+    click is visible without a second round-trip."""
+    page = (await _ensure_session()).page()
+    await page.mouse.move(x, y, steps=12)
+    await page.mouse.down()
+    if hold_seconds > 0:
+        await page.wait_for_timeout(int(hold_seconds * 1000))
+    await page.mouse.up()
+    # give a post-click transition (checkmark, redirect, reflow) a moment to
+    # start before the screenshot, so it reflects the outcome, not the click
+    await page.wait_for_timeout(400)
+    png = await page.screenshot()
+    return Image(data=png, format="png")
+
+
+@mcp.tool()
 async def browser_type(selector: str, text: str) -> str:
-    await (await _ensure_session()).page().fill(selector, text, timeout=15_000)
+    s = await _ensure_session()
+    await s.page().fill(selector, text, timeout=15_000)
     return f"typed into {selector}"
 
 
 @mcp.tool()
 async def browser_press_key(key: str) -> str:
-    await (await _ensure_session()).page().keyboard.press(key)
+    s = await _ensure_session()
+    await s.page().keyboard.press(key)
     return f"pressed {key}"
 
 
 @mcp.tool()
 async def browser_evaluate(expression: str) -> str:
-    result = await (await _ensure_session()).page().evaluate(expression)
+    s = await _ensure_session()
+    result = await s.page().evaluate(expression)
     return _json_capped(result)
 
 
@@ -147,14 +220,19 @@ async def browser_wait_for(text: str = "", seconds: float = 0) -> str:
         await s.page().get_by_text(text).first.wait_for(timeout=30_000)
         return f"saw text {text!r}"
     if seconds > 0:
-        import asyncio
-        await asyncio.sleep(min(seconds, 30))
+        await s.page().wait_for_timeout(int(seconds * 1000))
         return f"waited {seconds}s"
-    return "no-op"
+    return "nothing to wait for: pass text= or seconds="
 
 
 @mcp.tool()
 async def browser_take_screenshot() -> Image:
+    """One screenshot, on demand.
+
+    Distinct from the continuous capture in `session.py`, which records every
+    page from the moment it opens: this is for the caller that wants to LOOK at
+    something now, and it works whether or not capture is configured.
+    """
     png = await (await _ensure_session()).page().screenshot()
     return Image(data=png, format="png")
 
