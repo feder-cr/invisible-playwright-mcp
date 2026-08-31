@@ -3,7 +3,11 @@ from invisible_playwright_mcp.session import StealthSession
 
 
 class _FakePage:
+    # `is_closed()` is a METHOD on a real Page, and `session.page()` calls it
+    # to avoid handing back a tab the site closed under us. A fake carrying
+    # only a `closed` attribute passed while the code could not have worked.
     def __init__(self): self.closed = False
+    def is_closed(self): return self.closed
     async def close(self): self.closed = True
 
 
