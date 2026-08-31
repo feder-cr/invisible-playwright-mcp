@@ -42,10 +42,30 @@ mcp = FastMCP("stealth", lifespan=_lifespan)
 
 
 async def _ensure_session() -> StealthSession:
+    """One session per server, and a FAILED start must not poison the next call.
+
+    This used to assign the global BEFORE awaiting `start()`. A start that
+    raised - a stale INVISIBLE_SEAL_FILE and a proxy that is down are the two
+    easy ways to get one - left a half-built object behind. Every later call
+    then found a non-None `_session`, skipped the start, and died on
+    `'NoneType' object has no attribute ...`, which names nothing and cannot be
+    recovered without restarting the server. For a stdio server that is the
+    whole conversation gone, over a condition the operator could have fixed in
+    ten seconds if the error had said what it was.
+
+    So the session is built and started locally, and only one that actually
+    started is kept. And a session already in that state repairs itself rather
+    than requiring a restart: the process that has the defect is exactly the one
+    you notice it in, and there a fix that ships later never arrives. A session
+    with no browser is not a session; it is thrown away and made again.
+    """
     global _session
+    if _session is not None and getattr(_session, "_browser", None) is None             and getattr(_session, "_context", None) is None:
+        _session = None
     if _session is None:
-        _session = StealthSession()
-        await _session.start()
+        session = StealthSession()
+        await session.start()
+        _session = session
     return _session
 
 
