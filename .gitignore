@@ -5,5 +5,3 @@ __pycache__/
 build/
 dist/
 .venv/
-# capture output: frames and their frames.jsonl, written at run time
-mcp_captures/

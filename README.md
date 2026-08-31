@@ -37,13 +37,10 @@ Or add it to any MCP client via a config block (Claude Code, Cursor, Claude Desk
 | `STEALTHFOX_PROFILE_DIR` | A directory for a persistent profile, so logins survive across runs. |
 | `STEALTHFOX_BINARY` | Path to a specific engine binary (otherwise fetched automatically). |
 | `STEALTHFOX_HEADLESS` | `0` to run headed; headless by default. |
-| `STEALTHFOX_CAPTURE_DIR` | Record every page continuously as JPEG frames into this directory, with a `frames.jsonl` beside them carrying the url and timestamp of each. Defaults to `mcp_captures/` under the working directory. |
-| `STEALTHFOX_CAPTURE_INTERVAL_MS` | Milliseconds between frames (default `200`, floor `100`). |
-| `STEALTHFOX_CAPTURE_QUALITY` | JPEG quality 1-100 (default `55`). |
 
 ## Tools
 
-`session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_wait_for`, `browser_take_screenshot`.
+`session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_take_screenshot`.
 
 `browser_click_at` takes viewport coordinates instead of a selector, moves the
 pointer there rather than teleporting, optionally holds before releasing, and

@@ -214,25 +214,8 @@ async def browser_evaluate(expression: str) -> str:
 
 
 @mcp.tool()
-async def browser_wait_for(text: str = "", seconds: float = 0) -> str:
-    s = await _ensure_session()
-    if text:
-        await s.page().get_by_text(text).first.wait_for(timeout=30_000)
-        return f"saw text {text!r}"
-    if seconds > 0:
-        await s.page().wait_for_timeout(int(seconds * 1000))
-        return f"waited {seconds}s"
-    return "nothing to wait for: pass text= or seconds="
-
-
-@mcp.tool()
 async def browser_take_screenshot() -> Image:
-    """One screenshot, on demand.
-
-    Distinct from the continuous capture in `session.py`, which records every
-    page from the moment it opens: this is for the caller that wants to LOOK at
-    something now, and it works whether or not capture is configured.
-    """
+    """One screenshot of the active tab, on demand."""
     png = await (await _ensure_session()).page().screenshot()
     return Image(data=png, format="png")
 
