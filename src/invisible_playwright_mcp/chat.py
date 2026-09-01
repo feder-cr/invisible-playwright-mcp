@@ -110,7 +110,7 @@ PAGE = """<!doctype html>
   <div id="log"></div>
   <form id="f"><input id="i" placeholder="try: go https://example.com" autocomplete="off"><button>send</button></form>
 </div>
-<div id="right"><div id="bar">browser</div><iframe src="live"></iframe></div>
+<div id="right"><div id="bar">browser</div><iframe src="/live"></iframe></div>
 <script>
 const log = document.getElementById('log');
 function add(kind, text) {
@@ -121,14 +121,14 @@ function add(kind, text) {
   s.textContent = text;
   d.appendChild(s); log.appendChild(d); log.scrollTop = log.scrollHeight;
 }
-const es = new EventSource('chat/events');
+const es = new EventSource('/chat/events');
 es.onmessage = (e) => { const m = JSON.parse(e.data); add(m.kind, m.text); };
 document.getElementById('f').onsubmit = async (e) => {
   e.preventDefault();
   const i = document.getElementById('i');
   const text = i.value.trim(); if (!text) return;
   i.value = ''; add('you', text);
-  await fetch('chat/send', {method:'POST', headers:{'Content-Type':'application/json'},
+  await fetch('/chat/send', {method:'POST', headers:{'Content-Type':'application/json'},
                             body: JSON.stringify({text})});
 };
 </script>

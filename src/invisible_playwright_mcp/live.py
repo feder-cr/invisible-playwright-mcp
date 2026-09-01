@@ -36,6 +36,9 @@ PAGE = """<!doctype html>
   #state { margin-left:auto; color:#7c868e; }
   main { flex:1; display:flex; align-items:flex-start; justify-content:center;
          overflow:auto; padding:12px; }
+  /* display:none qui, e chi la mostra deve scrivere 'block': assegnare la
+     stringa vuota toglie lo stile inline e ricade su QUESTA regola, cioe'
+     lascia l'immagine nascosta con i pixel gia' dentro. */
   img { max-width:100%; border:1px solid #2a3037; border-radius:6px; display:none; }
   #empty { color:#7c868e; margin:auto; text-align:center; }
 </style>
@@ -48,7 +51,7 @@ let stop = false;
 async function tick() {
   if (stop) return;
   try {
-    const r = await fetch('frame?t=' + Date.now(), {cache: 'no-store'});
+    const r = await fetch('/live/frame?t=' + Date.now(), {cache: 'no-store'});
     if (r.status === 204) {
       img.style.display = 'none'; empty.style.display = ''; state.textContent = 'idle';
     } else if (r.ok) {
@@ -56,7 +59,7 @@ async function tick() {
       const old = img.src;
       img.src = URL.createObjectURL(blob);
       if (old.startsWith('blob:')) URL.revokeObjectURL(old);
-      img.style.display = ''; empty.style.display = 'none';
+      img.style.display = 'block'; empty.style.display = 'none';
       state.textContent = 'live';
       urlEl.textContent = r.headers.get('x-page-url') || '';
     } else {

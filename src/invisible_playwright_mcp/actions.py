@@ -72,16 +72,59 @@ async def read_text(session, selector: str = "body", max_chars: int = DEFAULT_MA
 
 
 SNAPSHOT_JS = """() => {
-    const inputs = Array.from(document.querySelectorAll('input, button, select, textarea, a')).map(el => ({
-        tag: el.tagName.toLowerCase(),
-        type: el.type || undefined,
-        name: el.name || undefined,
-        id: el.id || undefined,
-        placeholder: el.placeholder || undefined,
-        text: (el.innerText || el.value || '').trim().slice(0, 50),
-        visible: el.offsetParent !== null
-    })).filter(x => x.visible);
-    return { title: document.title, url: location.href, interactive_elements: inputs };
+    // Read only. Numbering the elements would mean writing an attribute into
+    // the page, which is a detection surface in a product that exists not to
+    // have one. If a stable index is ever wanted, it gets decided in the open.
+    const SEL = [
+        'input', 'button', 'select', 'textarea', 'a[href]',
+        '[role="button"]', '[role="link"]', '[role="checkbox"]',
+        '[role="radio"]', '[role="tab"]', '[role="menuitem"]', '[role="switch"]',
+        '[onclick]', '[tabindex]:not([tabindex="-1"])',
+        '[contenteditable="true"]'
+    ].join(',');
+
+    // offsetParent used to stand in for "visible" and was wrong both ways: it is
+    // null on every position:fixed element - the cookie banner, the sticky bar,
+    // the button inside a modal - and it says nothing about visibility:hidden or
+    // about an element parked at left:-9999px.
+    function shown(el) {
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return false;
+        const s = getComputedStyle(el);
+        if (s.visibility === 'hidden' || s.display === 'none') return false;
+        if (parseFloat(s.opacity) === 0) return false;
+        if (el.disabled === true) return false;
+        // Parked off-canvas to the left or above: the ordinary way to hide
+        // something without hiding it. Below the fold is NOT excluded, because
+        // the page may simply be long and that content is still real.
+        if (r.right <= 0 || r.bottom <= 0) return false;
+        return true;
+    }
+
+    const seen = new Set();
+    const out = [];
+    for (const el of document.querySelectorAll(SEL)) {
+        if (seen.has(el)) continue;
+        seen.add(el);
+        if (!shown(el)) continue;
+        const r = el.getBoundingClientRect();
+        out.push({
+            tag: el.tagName.toLowerCase(),
+            role: el.getAttribute('role') || undefined,
+            type: el.type || undefined,
+            name: el.name || undefined,
+            id: el.id || undefined,
+            href: el.tagName === 'A' ? (el.getAttribute('href') || undefined) : undefined,
+            placeholder: el.placeholder || undefined,
+            label: el.getAttribute('aria-label') || undefined,
+            text: (el.innerText || el.value || '').trim().slice(0, 50),
+            // Viewport coordinates of the centre, so browser_click_at can reach
+            // what no selector describes.
+            at: [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)],
+            in_view: r.top < innerHeight && r.left < innerWidth
+        });
+    }
+    return { title: document.title, url: location.href, interactive_elements: out };
 }"""
 
 
