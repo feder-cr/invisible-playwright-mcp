@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP, Image
 
-from . import actions
+from . import actions, live
 from .registry import DEFAULT_SESSION_ID, SessionRegistry
 
 # Kept for callers that imported it from here. The implementation moved.
@@ -63,6 +63,10 @@ atexit.register(_close_sessions_at_exit)
 
 
 mcp = FastMCP("stealth", lifespan=_lifespan)
+
+# The live view rides on the app FastMCP already serves, and stays out of
+# the tool path so its frames never enter a model's context.
+live.install(mcp, registry)
 
 
 async def _ensure_session(session_id: str = DEFAULT_SESSION_ID):
