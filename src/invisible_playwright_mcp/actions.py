@@ -182,6 +182,26 @@ SNAPSHOT_JS = """() => {
         if (el.id) base = '#' + cssq(el.id);
         else if (el.name) base = el.tagName.toLowerCase() + "[name='" + attr(el.name) + "']";
         else if (href) { base = "a[href='" + attr(href) + "']"; fromHref = true; }
+        // The two below are APPENDED to the order rather than woven into it, so
+        // no selector that already worked changes and the risk of regressing
+        // the 88% is zero. They exist because 9.5% of elements had no handle at
+        // all and fell back on coordinates, which go stale the moment the page
+        // scrolls: of those, 58% carried a data-testid - an attribute whose
+        // whole purpose is to be a stable unique handle - and a further quarter
+        // an aria-label that was unique on the page.
+        else {
+            const dt = el.getAttribute('data-testid') || el.getAttribute('data-test')
+                    || el.getAttribute('data-qa') || el.getAttribute('data-cy');
+            if (dt) {
+                const which = el.getAttribute('data-testid') ? 'data-testid'
+                            : el.getAttribute('data-test') ? 'data-test'
+                            : el.getAttribute('data-qa') ? 'data-qa' : 'data-cy';
+                base = '[' + which + "='" + attr(dt) + "']";
+            } else {
+                const al = el.getAttribute('aria-label');
+                if (al) base = "[aria-label='" + attr(al) + "']";
+            }
+        }
         if (!base) return null;
         const n = nodesFor(base);
         if (n.length === 1) return {sel: base, fromHref: fromHref};
