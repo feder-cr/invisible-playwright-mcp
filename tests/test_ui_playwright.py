@@ -95,19 +95,25 @@ def test_the_view_really_takes_a_frame(page):
     # What the test must demand is that the view REACHES a frame. A PERSISTENT
     # error prevents that, and it is exactly the shape of the defect this test
     # was born from: `error 404` on every poll, forever.
+    # No early exit on a run of errors, and that is a correction rather than an
+    # omission. A first version failed after eight consecutive error polls,
+    # which is a load-sensitive constant: on a busy machine a single navigation
+    # produces more than eight failed frames at one every 400ms, so the test
+    # went red over the CPU rather than over the product. It passed alone and
+    # failed inside the full suite.
+    #
+    # It also bought nothing. The loop below already fails when the view never
+    # reaches `live`, which is exactly what a persistent error does, and that is
+    # the defect this test was born from: `error 404` on every poll, forever.
+    # The only thing the counter added was a clearer message, and that is kept
+    # by reporting the last state seen.
     state = "connecting"
-    in_a_row = 0
     for _ in range(60):
         page.wait_for_timeout(1_000)
         f = view_frame()
         if f is None:
             continue
         state = f.evaluate("() => document.getElementById('state').textContent")
-        if state.startswith("error"):
-            in_a_row += 1
-            assert in_a_row < 8, f"the view has answered {state} for {in_a_row} polls in a row"
-            continue
-        in_a_row = 0
         if state == "live":
             break
     else:

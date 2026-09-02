@@ -151,6 +151,16 @@ async def browser_read_text(selector: str = "body", max_chars: int = 6000) -> st
 async def browser_snapshot(max_chars: int = 0) -> str:
     """Title, url, and the interactive elements that are actually visible.
 
+    Each element carries a `selector` when one can reach it: pass that string to
+    browser_click or browser_type VERBATIM. It is built to match exactly one
+    element, which the obvious selector often does not - measured across 958
+    elements on real pages, 88% could be addressed but only 48% unambiguously,
+    and Playwright acts on the first match, so a caller aiming at the third of
+    five identical links would silently hit the first.
+
+    Elements with no `selector` carry `at`, the centre coordinates, for
+    browser_click_at.
+
     Not the accessibility tree: on a real sign-up page a single country
     `<select>` contributes about two hundred `<option>` nodes, which fill the
     character cap before the form the caller was looking for appears at all.
@@ -198,7 +208,14 @@ async def browser_click_at(x: float, y: float, hold_seconds: float = 0.0) -> Ima
     selector - for targets a selector cannot reliably reach: a slider track, a
     canvas-drawn captcha, or a precise point inside a wider element. Moves the
     pointer there first (no teleport), then down, then up, holding first if
-    hold_seconds is set. Returns a screenshot taken right after release."""
+    hold_seconds is set. Returns a screenshot taken right after release.
+
+    Coordinates are relative to the VIEWPORT, not to the page, so the ones in a
+    snapshot go stale the moment anything scrolls: a click, a keypress, a lazy
+    image loading in above the fold. Nothing raises when that happens - the
+    click simply lands on whatever is at that spot now. Take a fresh snapshot
+    after anything that could have moved the page, and prefer browser_click with
+    the element's `selector` whenever it has one."""
     png = await actions.click_at(await registry.ensure(), x, y, hold_seconds)
     return Image(data=png, format="png")
 
