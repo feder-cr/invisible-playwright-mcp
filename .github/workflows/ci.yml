@@ -9,6 +9,24 @@ permissions:
   contents: read
 
 jobs:
+  # This repository is public, and everything in it is English by rule. That was
+  # a convention living in one person's head until 2026-09-02, when five files
+  # and a whole test module turned out to be in Italian and nothing noticed:
+  # pytest has no opinion about language, and the gate that checks it lived in a
+  # sibling repository, so running it from here silently scanned the wrong tree.
+  # A convention nobody enforces is a habit, and a habit skips a session.
+  english:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the repository is English
+        run: |
+          python scripts/check_english_only.py --selftest
+          python scripts/check_english_only.py
+
   test:
     runs-on: ubuntu-latest
     strategy:
