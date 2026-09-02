@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "invisible-playwright-mcp"
-version = "0.8.0"
+version = "0.8.1"
 description = "Stealth Firefox browser as an MCP server for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +20,13 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=1.2,<2",
-    "invisible-playwright>=0.7.1",
+    # >=0.9.0 and not lower, because this package's own behaviour depends on the
+    # fix in it. browser_click_at holds a button down with wait_for_timeout, and
+    # in every earlier version that wait returned instantly: hold_seconds never
+    # held, so the one tool built for sliders and press-and-hold challenges
+    # pressed and released in the same frame. The screenshot it returns was
+    # taken before the click had any effect, for the same reason.
+    "invisible-playwright>=0.9.0",
     # HTML parsing for browser_read_html. Chosen over lxml by measurement: on
     # six real pages both found byte-identical sets of interactive elements, so
     # correctness did not separate them, and selectolax then parsed 3-5x faster

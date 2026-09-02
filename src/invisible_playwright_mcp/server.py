@@ -210,6 +210,12 @@ async def browser_click_at(x: float, y: float, hold_seconds: float = 0.0) -> Ima
     pointer there first (no teleport), then down, then up, holding first if
     hold_seconds is set. Returns a screenshot taken right after release.
 
+    hold_seconds needs invisible-playwright 0.9.0 or newer to mean anything. In
+    every earlier version the wait it is built on returned instantly, so the
+    press and the release happened in the same frame and the hold never
+    happened - on the one tool that exists for sliders and press-and-hold
+    challenges. The floor in pyproject.toml is set accordingly.
+
     Coordinates are relative to the VIEWPORT, not to the page, so the ones in a
     snapshot go stale the moment anything scrolls: a click, a keypress, a lazy
     image loading in above the fold. Nothing raises when that happens - the

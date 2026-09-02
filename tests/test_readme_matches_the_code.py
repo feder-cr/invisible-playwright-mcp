@@ -82,3 +82,36 @@ def test_the_readme_names_every_tool_the_server_registers():
     listed = _listed_tools()
     missing = sorted(names - listed)
     assert not missing, f"registered but not in the tool list under ## Tools: {missing}"
+
+
+def test_the_engine_floor_covers_the_wait_this_package_relies_on():
+    """`browser_click_at` holds a button down with `wait_for_timeout`, and in
+    invisible-playwright before 0.9.0 that wait returned instantly: `hold_seconds`
+    never held, on the one tool that exists for sliders and press-and-hold
+    challenges, and the screenshot it returns was taken before the click had any
+    effect.
+
+    A floor that allows an older engine ships that behaviour to anyone whose
+    resolver picks one. This is not a style preference: the shipped code calls
+    the method, so the floor is part of the contract.
+    """
+    import pathlib
+    import re
+    import tomllib
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    deps = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    declared = [d for d in deps["project"]["dependencies"] if "invisible-playwright" in d]
+    assert declared, "the engine dependency is gone"
+    floor = re.search(r">=\s*(\d+)\.(\d+)\.(\d+)", declared[0])
+    assert floor, f"no floor on the engine: {declared[0]!r}"
+    major, minor, _ = (int(g) for g in floor.groups())
+    assert (major, minor) >= (0, 9), (
+        f"{declared[0]!r} allows an engine whose wait_for_timeout does nothing, "
+        "so hold_seconds in browser_click_at would silently not hold")
+
+    # And the code really does depend on it, so this floor is not superstition.
+    source = (root / "src" / "invisible_playwright_mcp" / "actions.py").read_text(encoding="utf-8")
+    assert "wait_for_timeout" in source, (
+        "nothing calls wait_for_timeout any more; if that is deliberate, this "
+        "floor can come down and this test should say so")
