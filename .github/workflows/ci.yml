@@ -27,6 +27,33 @@ jobs:
           python scripts/check_english_only.py --selftest
           python scripts/check_english_only.py
 
+  # Every version on the index must have a GitHub release carrying it. Measured
+  # 2026-09-02: five published versions, five tags, zero releases. The rule had
+  # existed for months and both sibling packages enforce it with a test; this
+  # repository did not, so the gap grew one release at a time with nothing
+  # downstream breaking. The releases were backfilled by hand that day, and a gap
+  # fixed by hand and guarded by nothing reopens on the next release.
+  #
+  # The job sets MCP_CHECK_RELEASES itself, so it cannot silently skip the way it
+  # does in a local run.
+  releases:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: every published version has a release page
+        env:
+          MCP_CHECK_RELEASES: "1"
+          # One API call per version. Unauthenticated the limit is 60 an hour
+          # per runner IP, shared with everything else on it.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          python -m pytest -q tests/test_release_pages.py
+
   test:
     runs-on: ubuntu-latest
     strategy:
