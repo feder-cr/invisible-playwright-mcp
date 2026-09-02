@@ -102,27 +102,19 @@ and closing a client no longer kills the browser.
 
     STEALTHFOX_MCP_TRANSPORT=http uvx invisible-playwright-mcp
 
-Two pages come with it, on the same port, and neither is an MCP tool. That is
-deliberate: a tool result goes into the model's context, so a view refreshing
-twice a second would spend a whole context window on pictures of a page nobody
-asked about.
+## Something to watch it with
 
-`http://127.0.0.1:8765/live` is what the browser is looking at right now. It
-never starts a browser, it only reports one that is already running, and it says
-so plainly when nothing is.
+This package used to serve two pages of its own: a live view of the browser and a
+two-pane chat. Since 0.9.0 it does not. They are in
+[`aihawk`](https://github.com/feder-cr/AIHawk), which brings a model as well, and
+which reaches the browser through the tools above rather than through anything
+private.
 
-`http://127.0.0.1:8765/` is a two-pane shell: a conversation on the left, that
-same live view on the right. **There is no model behind it.** What it has is a
-placeholder that understands a handful of literal commands (`go <url>`,
-`read [selector]`, `click <selector>`, `type <selector> <text>`, `shot`) and says
-so when you type anything else. It exists so the seam a model plugs into is
-exercised rather than imagined, and it goes through exactly the same code the
-MCP tools do, so whatever it can do a client can do too.
-
-The difference between the two is the rule the code follows: the view observes
-and the chat acts. Opening `/live` never starts a browser, it only reports one
-that is already there. Typing a command into the chat does start one, the same
-way a tool call would.
+The move is worth a sentence because it is a promise about this package. Nothing
+here has a privileged path to the page any more, so the fourteen tools are enough
+to build an interface on - and that is not an assertion, it is how the interface
+that exists is built. A page kept inside the server is a page whose needs quietly
+become the server's requirements.
 
 ## Notes
 

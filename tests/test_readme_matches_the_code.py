@@ -1,9 +1,10 @@
 """The README describes this package. These check that it still describes THIS one.
 
 Written 2026-09-02, after finding that the HTTP transport, the live view and the
-two-pane chat had shipped in 0.4.0 and were named nowhere in the README. Three
-environment variables and two whole pages that a user had no way to discover: not
-broken, just invisible, which is the same thing from the outside.
+two-pane chat had shipped in 0.4.0 and were named nowhere in the README: not
+broken, just invisible, which is the same thing from the outside. The view and
+the chat left for `aihawk` the same day, so the drift to watch for here is now
+the opposite one - a README still offering pages this package stopped serving.
 
 Documentation drift is silent by construction. Nothing fails, nothing is red, and
 the gap only surfaces when somebody asks for a feature that has been there for a
@@ -19,16 +20,26 @@ README = pathlib.Path(__file__).resolve().parents[1] / "README.md"
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "invisible_playwright_mcp"
 
 
-def test_the_readme_lists_the_commands_the_stub_understands():
-    """The placeholder's command list lives in one string in chat.py. When it
-    grows, the README is the thing nobody remembers to move."""
-    from invisible_playwright_mcp.chat import LiteralBrain
+def test_the_readme_does_not_describe_an_interface_this_package_no_longer_has():
+    """The page and the chat moved to `aihawk` in 0.9.0.
 
-    commands = set(re.findall(r"`(\w+)[^`]*`", LiteralBrain.HELP))
-    assert commands, "LiteralBrain.HELP no longer lists its commands in backticks"
+    A README that still offers them is worse than one that never mentioned them:
+    it sends a reader to a URL that answers 404 and makes the split look like a
+    regression. Checked against the code rather than against the prose, so this
+    goes red the day either comes back without the README being told.
+    """
     text = README.read_text(encoding="utf-8")
-    missing = sorted(c for c in commands if f"`{c}" not in text)
-    assert not missing, f"the stub understands these and the README does not mention them: {missing}"
+    assert not (SRC / "chat.py").exists(), "chat.py is back; this test is now wrong"
+    assert not (SRC / "live.py").exists(), "live.py is back; this test is now wrong"
+
+    # What is forbidden is OFFERING the pages, not naming them: the README has
+    # to be able to say they moved, and the first version of this check went red
+    # on that very sentence. A rule that forbids the vocabulary rather than the
+    # claim is a rule somebody deletes instead of obeying.
+    offered = re.findall(r"https?://[^\s`)]*:\d+/\S*", text)
+    bad = [u for u in offered if u.rstrip("/.").endswith(("/live", ":8765"))
+           or "/live" in u or "/chat" in u]
+    assert not bad, f"the README points at pages this package no longer serves: {bad}"
 
 
 def test_every_environment_variable_the_code_reads_is_documented():

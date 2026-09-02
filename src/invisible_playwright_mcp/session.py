@@ -68,6 +68,40 @@ class StealthSession:
                         self._active = pid
         return list(self._pages)
 
+    async def describe_pages(self) -> list[dict]:
+        """Each tab as id, title, url and whether it is the active one.
+
+        `list_pages` answers with ids alone, which is enough for this session's
+        own bookkeeping and not enough for a caller. Choosing a tab by id with
+        no idea what is in it is choosing blind, and until 0.9.0 that is exactly
+        what `session_list_pages` handed a model, while its description
+        promised these four fields. The description was the sensible half, so
+        the data moved to meet it.
+
+        It lives here rather than in `actions` because `_pages` and `_active`
+        are this object's business: a second reader of that dict would be a
+        second place that has to be right about which tab is current.
+
+        Title costs a round trip per tab and url does not, so a page that will
+        not answer contributes what it can rather than failing the whole list -
+        a tab mid-navigation must not make the others unreadable.
+        """
+        out: list[dict] = []
+        for pid in self.list_pages():
+            page = self._pages.get(pid)
+            row = {"id": pid, "active": pid == self._active, "url": "", "title": ""}
+            if page is not None:
+                try:
+                    row["url"] = page.url
+                except Exception:
+                    pass
+                try:
+                    row["title"] = await page.title()
+                except Exception:
+                    pass
+            out.append(row)
+        return out
+
     def select_page(self, page_id: str) -> None:
         if page_id not in self._pages:
             raise RuntimeError(f"no such tab: {page_id}")

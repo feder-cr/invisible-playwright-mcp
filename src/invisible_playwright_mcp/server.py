@@ -4,13 +4,22 @@ Tool names mirror the Microsoft Playwright MCP so prompts stay portable.
 Config comes from STEALTHFOX_* env vars; a session starts lazily on first use.
 
 Every tool here is a wrapper. The operations live in `actions.py` and the
-sessions live in `registry.py`, so the built-in chat and any other client drive
-the browser through exactly the same code rather than through a second
-implementation that would drift from this one.
+sessions live in `registry.py`, so every client drives the browser through
+exactly the same code rather than through a second implementation that would
+drift from this one.
 
 Transport is stdio by default, which is what existing clients expect. Set
 STEALTHFOX_MCP_TRANSPORT=http to serve over streamable HTTP instead, which is
 what lets more than one client attach to the same live browser.
+
+THERE IS NO INTERFACE HERE, and that is the point rather than an omission. This
+package served a two-pane page and a live view until 0.9.0, reaching the browser
+through `registry` because it was in the same process. Both moved to `aihawk`,
+which now reaches the browser over MCP like anybody else. What that buys is not
+tidiness: it means no client has a privileged path, so the tools below are
+provably sufficient for the flagship interface, because the flagship interface
+is a client of them. A page kept inside the server is a page whose needs quietly
+become the server's requirements.
 """
 from __future__ import annotations
 
@@ -21,7 +30,7 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP, Image
 
-from . import actions, chat, live
+from . import actions
 from .registry import DEFAULT_SESSION_ID, SessionRegistry
 
 # Kept for callers that imported it from here. The implementation moved.
@@ -64,14 +73,6 @@ atexit.register(_close_sessions_at_exit)
 
 mcp = FastMCP("stealth", lifespan=_lifespan)
 
-# The live view rides on the app FastMCP already serves, and stays out of
-# the tool path so its frames never enter a model's context.
-live.install(mcp, registry)
-
-# The chat is a client of the same action layer, not a second path to the
-# page: what it can do is exactly what an MCP client can do.
-chat_service = chat.install(mcp, registry)
-
 
 async def _ensure_session(session_id: str = DEFAULT_SESSION_ID):
     return await registry.ensure(session_id)
@@ -106,8 +107,11 @@ async def session_new_page() -> str:
 
 @mcp.tool()
 async def session_list_pages() -> str:
-    """Every open tab: id, title, url, and which one is active."""
-    return actions.list_pages(await registry.ensure())
+    """Every open tab: id, title, url, and which one is active.
+
+    Use it before session_select_page: the id alone does not tell you which tab
+    you are switching to."""
+    return await actions.list_pages(await registry.ensure())
 
 
 @mcp.tool()

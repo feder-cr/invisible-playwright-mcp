@@ -78,8 +78,14 @@ async def new_page(session) -> str:
     return await session.new_page()
 
 
-def list_pages(session) -> str:
-    return json.dumps(session.list_pages())
+async def list_pages(session) -> str:
+    """Every tab as id, title, url and active flag, which is what the tool says.
+
+    Async now, and it was not: title has to be asked of the page. That cost buys
+    the difference between a caller that can choose a tab and one that can only
+    count them.
+    """
+    return json.dumps(await session.describe_pages())
 
 
 def select_page(session, page_id: str) -> str:
