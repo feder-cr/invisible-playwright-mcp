@@ -9,9 +9,9 @@ async def test_server_registers_expected_tools():
     expected = {
         "session_new_page", "session_list_pages", "session_select_page",
         "session_close_page", "browser_navigate", "browser_read_text",
-        "browser_snapshot", "browser_click", "browser_click_at",
-        "browser_type", "browser_press_key", "browser_evaluate",
-        "browser_take_screenshot",
+        "browser_snapshot", "browser_read_html", "browser_click",
+        "browser_click_at", "browser_type", "browser_press_key",
+        "browser_evaluate", "browser_take_screenshot",
     }
     # EXACT, not a subset. `expected <= names` passed while a tool nobody
     # meant to publish sat in the list, and the surface of an MCP server is

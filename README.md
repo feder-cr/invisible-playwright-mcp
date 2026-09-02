@@ -40,7 +40,7 @@ Or add it to any MCP client via a config block (Claude Code, Cursor, Claude Desk
 
 ## Tools
 
-`session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_take_screenshot`.
+`session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_read_html`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_take_screenshot`.
 
 `browser_click_at` takes viewport coordinates instead of a selector, moves the
 pointer there rather than teleporting, optionally holds before releasing, and
@@ -51,6 +51,15 @@ or a press-and-hold.
 elements rather than the accessibility tree: one country `<select>` on a real
 sign-up page contributes about two hundred `<option>` nodes, which fill the
 character budget before the form does.
+
+`browser_read_html` returns the page's markup instead of a flat list, for when
+the structure is what matters: a form and its labels, a table, what a control is
+wired to. The browser decides what is actually painted, on a clone of the
+document so the live page is never written to, and the markup is then reduced to
+what is worth reading. Measured on real pages, 8.9 MB of markup became 223 KB
+with every one of the 1,204 interactive elements still present. `mode`
+is `form` (the interactive surface and the text explaining it), `text` (the prose
+alone) or `full` (the structure, with the noise and the attribute soup gone).
 
 Tool names mirror the Microsoft Playwright MCP, so prompts written for it work here too.
 

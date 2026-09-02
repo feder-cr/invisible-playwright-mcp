@@ -42,7 +42,7 @@ class _FakeSession:
 
     async def evaluate(self, script, *a):
         self.calls.append(("evaluate", None))
-        return "testo della pagina"
+        return "page text"
 
 
 class _Registry:
@@ -79,7 +79,7 @@ async def test_the_chat_calls_the_same_functions_as_the_tools():
             await _record(actions.navigate, "x")
 
     svc = chat.ChatService(_Registry(_FakeSession()), brain=_Spy())
-    await svc.send("qualsiasi cosa")
+    await svc.send("anything at all")
     assert used == [actions.navigate]
 
     # And the shipped brain reaches for the same module.
@@ -113,7 +113,7 @@ async def test_a_failing_action_is_reported_and_does_not_kill_the_conversation()
     assert errors and "morto" in errors[0]["text"]
 
     # still usable afterwards
-    await svc.send("qualcosa")
+    await svc.send("something")
     assert svc.history[-1]["kind"] in ("said", "err")
 
 

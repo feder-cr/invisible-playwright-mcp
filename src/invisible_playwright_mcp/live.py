@@ -36,9 +36,9 @@ PAGE = """<!doctype html>
   #state { margin-left:auto; color:#7c868e; }
   main { flex:1; display:flex; align-items:flex-start; justify-content:center;
          overflow:auto; padding:12px; }
-  /* display:none qui, e chi la mostra deve scrivere 'block': assegnare la
-     stringa vuota toglie lo stile inline e ricade su QUESTA regola, cioe'
-     lascia l'immagine nascosta con i pixel gia' dentro. */
+  /* display:none here, and whoever shows it must write 'block': assigning the
+     empty string removes the inline style and falls back on THIS rule, which
+     leaves the image hidden with the pixels already inside it. */
   img { max-width:100%; border:1px solid #2a3037; border-radius:6px; display:none; }
   #empty { color:#7c868e; margin:auto; text-align:center; }
 </style>
@@ -62,6 +62,15 @@ async function tick() {
       img.style.display = 'block'; empty.style.display = 'none';
       state.textContent = 'live';
       urlEl.textContent = r.headers.get('x-page-url') || '';
+    } else if (r.status === 503) {
+      // Busy, not broken. A screenshot cannot be taken while the page is
+      // navigating, and at one frame every 400ms an ordinary four-second
+      // navigation produces ten of these in a row. Calling that an error made
+      // the view flash red every time anybody opened a page, and it is the
+      // reason this branch is spelled out instead of falling through below.
+      // The last frame stays on screen: a stale picture of where the browser
+      // just was beats a red word about where it is going.
+      state.textContent = 'busy';
     } else {
       state.textContent = 'error ' + r.status;
     }

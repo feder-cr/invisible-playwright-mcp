@@ -128,7 +128,7 @@ async def browser_read_text(selector: str = "body", max_chars: int = 6000) -> st
 
 
 @mcp.tool()
-async def browser_snapshot(max_chars: int = 6000) -> str:
+async def browser_snapshot(max_chars: int = 0) -> str:
     """Title, url, and the interactive elements that are actually visible.
 
     Not the accessibility tree: on a real sign-up page a single country
@@ -136,6 +136,21 @@ async def browser_snapshot(max_chars: int = 6000) -> str:
     character cap before the form the caller was looking for appears at all.
     """
     return await actions.snapshot(await registry.ensure(), max_chars)
+
+
+@mcp.tool()
+async def browser_read_html(mode: str = "form") -> str:
+    """The page's HTML, cleaned down to what is worth reading.
+
+    Use this when the STRUCTURE matters - a form and its labels, a table, what
+    a control is wired to. `browser_snapshot` gives a flat inventory of things
+    to click; this keeps the markup and the relationships inside it.
+
+    mode="form" keeps the interactive surface and the text explaining it,
+    mode="text" returns the prose alone, mode="full" keeps the structure with
+    the noise and the attribute soup removed.
+    """
+    return await actions.read_html(await registry.ensure(), mode)
 
 
 @mcp.tool()
