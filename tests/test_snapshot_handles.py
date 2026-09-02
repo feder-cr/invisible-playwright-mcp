@@ -94,7 +94,17 @@ def page():
 
 
 def _load(page, body):
-    page.goto(f"data:text/html,<html><body>{body}</body></html>")
+    """Load a fragment as a page.
+
+    The markup is percent-encoded, and that is not tidiness. A `data:` URL ends
+    at the first `#`, so a body containing `href="#main"` is TRUNCATED there:
+    the page loads, the browser reports no error, and the test then measures a
+    document that stops mid-attribute. It cost one wrong diagnosis - a fix
+    declared broken when the test had never shown it the case.
+    """
+    from urllib.parse import quote
+
+    page.goto("data:text/html," + quote(f"<html><body>{body}</body></html>"))
     page.wait_for_timeout(250)
     return page.evaluate(actions.SNAPSHOT_JS)["interactive_elements"]
 
@@ -189,3 +199,123 @@ def test_an_element_with_nothing_at_all_gets_no_handle_rather_than_a_bad_one(pag
     element = _load(page, "<button>bare</button>")[0]
     assert "selector" not in element
     assert element["at"], "with no selector there must at least be a coordinate"
+
+
+@pytest.mark.e2e
+def test_one_impossible_element_does_not_cost_the_page(page):
+    """Measured on a real site: the snapshot died inside getBoundingClientRect
+    with "can't access property width, r is undefined", and the caller received
+    nothing at all for the whole document.
+
+    Nothing is the worst possible answer. It is worse than a partial list, and
+    it is indistinguishable from a page with no controls on it, so the caller
+    cannot even tell that something went wrong. A page can shadow or replace
+    that method, and some do.
+    """
+    body = ("<a href='/uno' id='primo'>uno</a>"
+            "<button id='rotto'>broken</button>"
+            "<a href='/due' id='terzo'>due</a>"
+            "<script>document.getElementById('rotto')"
+            ".getBoundingClientRect = function () { return undefined; };</script>")
+    elements = _load(page, body)
+    texts = [e.get("text") for e in elements]
+    assert "uno" in texts and "due" in texts, (
+        f"one broken element cost the others: {texts}")
+    assert "broken" not in texts, "the element with no rectangle was reported anyway"
+
+
+@pytest.mark.e2e
+def test_a_link_clipped_to_nothing_is_not_offered_as_clickable(page):
+    """A "skip to content" link is invisible until focused, and clicking it as
+    reported does not work: Playwright spends its whole timeout on it, 208
+    attempts over 15 seconds, and hands back an opaque failure. Two of three
+    failed clicks in a real-site run were exactly this.
+
+    Excluding it is not concealment. `shown()` exists to report what is VISIBLE
+    and already excludes visibility:hidden and opacity:0; an element clipped to
+    a zero rectangle is invisible by the same rule, written differently in CSS.
+    """
+    body = ("<a href='#main' style='position:absolute;clip:rect(0,0,0,0);"
+            "width:1px;height:1px;overflow:hidden'>Skip to content</a>"
+            "<a href='/real' id='vero'>Real link</a>")
+    texts = [e.get("text") for e in _load(page, body)]
+    assert "Real link" in texts
+    assert "Skip to content" not in texts, (
+        "a link clipped to nothing was offered as clickable")
+
+
+@pytest.mark.e2e
+def test_a_small_but_visible_control_is_still_offered(page):
+    """The exclusion has to stay narrow. A checkbox is small and perfectly
+    clickable, and losing it would be the defect this file exists to prevent."""
+    elements = _load(page, "<input type='checkbox' name='ok'><label>Yes</label>")
+    assert any(e.get("name") == "ok" for e in elements), (
+        f"a real checkbox was excluded as too small: {elements}")
+
+
+@pytest.mark.e2e
+def test_a_form_control_hidden_the_visually_hidden_way_is_kept(page):
+    """The exclusion above must not reach form controls.
+
+    A file input and a custom checkbox are hidden by exactly that markup on an
+    enormous share of the web, with a styled <label> as the visible affordance,
+    and they stay fully operable: Playwright can check() and set_input_files()
+    them. Losing them would cost an agent the ability to tick a consent box or
+    upload a file, which is worse than the skip link the rule exists to remove.
+
+    Found by review, not by writing: the first version of the rule excluded
+    both, and the case that made it obvious is that a skip link is an <a> while
+    these are not.
+    """
+    hidden = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"
+    kept = {
+        "file input": f"<input type='file' id='f' style='{hidden}'>",
+        "custom checkbox": "<input type='checkbox' id='c' style='width:1px;height:1px;overflow:hidden'>",
+        "hidden button": f"<button id='b' style='{hidden}'>Go</button>",
+    }
+    dropped = {
+        "skip link": f"<a href='/main' style='{hidden}'>Skip</a>",
+        "decorative div": f"<div role='button' style='{hidden}'>x</div>",
+    }
+    problems = []
+    for name, body in kept.items():
+        if not _load(page, body):
+            problems.append(f"{name} was excluded and is operable")
+    for name, body in dropped.items():
+        if _load(page, body):
+            problems.append(f"{name} was reported and cannot be clicked")
+    assert not problems, problems
+
+
+@pytest.mark.e2e
+def test_elements_that_cannot_be_measured_are_counted_not_hidden(page):
+    """A guard that swallows is worse than the crash it replaces.
+
+    The first version returned false when getBoundingClientRect misbehaved, so a
+    page replacing it on Element.prototype - the exact case the guard names -
+    produced an empty list with no error, byte-identical to a page with no
+    controls. The crash at least named its cause. Counting separates the two:
+    one odd element leaves the rest and says 1, a shadowed prototype leaves
+    nothing and says how many it could not read.
+    """
+    one_bad = ("<a href='/a' id='p'>one</a><button id='x'>bad</button>"
+               "<a href='/b' id='t'>two</a>"
+               "<script>document.getElementById('x')"
+               ".getBoundingClientRect = () => undefined;</script>")
+    page.goto("data:text/html," + __import__("urllib.parse", fromlist=["quote"]).quote(
+        f"<html><body>{one_bad}</body></html>"))
+    page.wait_for_timeout(250)
+    d = page.evaluate(actions.SNAPSHOT_JS)
+    assert len(d["interactive_elements"]) == 2
+    assert d.get("unmeasurable") == 1, f"the skipped element was not counted: {d}"
+
+    tampered = ("<a href='/a'>one</a><button>two</button>"
+                "<script>Element.prototype.getBoundingClientRect = () => undefined;</script>")
+    page.goto("data:text/html," + __import__("urllib.parse", fromlist=["quote"]).quote(
+        f"<html><body>{tampered}</body></html>"))
+    page.wait_for_timeout(250)
+    d = page.evaluate(actions.SNAPSHOT_JS)
+    assert d["interactive_elements"] == []
+    assert d.get("unmeasurable", 0) >= 2, (
+        "a page-wide tampering is indistinguishable from a page with no "
+        f"controls, which is the defect this counter exists to remove: {d}")

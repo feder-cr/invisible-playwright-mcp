@@ -63,6 +63,13 @@ acts on the first match without complaining, so aiming at the third of five
 identical links quietly hit the first. Elements no selector can reach carry `at`
 instead, the centre coordinates, for `browser_click_at`.
 
+When a click does not land, the error says what stopped it rather than only that
+it timed out: an element covering the target is named, with its id, its class and
+its text, because the next move is to deal with that thing and not to retry. If
+the page has replaced `getBoundingClientRect` so that nothing can be measured,
+the snapshot reports `unmeasurable` with a count instead of an empty list, so a
+tampered page cannot be mistaken for a page with no controls.
+
 When an element has none of those, the selector falls back to `data-testid` and
 then to a unique `aria-label`, which together took coverage from 90.5% of
 elements to 97.9%. It stops there: a text-based selector is not stable, and a
@@ -79,8 +86,8 @@ href, having nothing duplicated.
 the structure is what matters: a form and its labels, a table, what a control is
 wired to. The browser decides what is actually painted, on a clone of the
 document so the live page is never written to, and the markup is then reduced to
-what is worth reading. Measured on real pages, 8.9 MB of markup became 223 KB
-with every one of the 1,204 interactive elements still present. `mode`
+what is worth reading. Measured on real pages, 9.6 MB of markup became 293 KB
+with every one of the 1,453 interactive elements still present. `mode`
 is `form` (the interactive surface and the text explaining it), `text` (the prose
 alone) or `full` (the structure, with the noise and the attribute soup gone).
 

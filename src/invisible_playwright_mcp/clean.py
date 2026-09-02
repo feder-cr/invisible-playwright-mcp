@@ -547,12 +547,24 @@ VISIBLE_HTML_JS = """() => {
     const doomed = [];
     for (let i = 0; i < live.length && i < copy.length; i++) {
         const el = live[i];
-        const s = getComputedStyle(el);
+        // Wrapped, because a page can shadow or replace either of these methods
+        // and this loop walks EVERY element in the document: one failure would
+        // otherwise take the whole read with it, and browser_read_html would
+        // return an error where a page was asked for.
+        //
+        // Failure means KEEP, which is the opposite of what the snapshot does
+        // with the same uncertainty, and deliberately so. This function decides
+        // what to DELETE from a copy, so "I could not tell" has to mean "leave
+        // it alone"; the snapshot decides what to REPORT, where the same answer
+        // means "do not claim it is there". Both directions preserve rather
+        // than destroy.
+        let s = null, r = null;
+        try { s = getComputedStyle(el); r = el.getBoundingClientRect(); } catch (err) { continue; }
+        if (!s || !r || typeof r.width !== 'number') continue;
         if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) === 0) {
             doomed.push(copy[i]);
             continue;
         }
-        const r = el.getBoundingClientRect();
         // Zero-area is not enough on its own: a wrapper can have no box while
         // its children are painted, so only strip it when nothing is inside.
         if (r.width <= 0 && r.height <= 0 && el.children.length === 0
