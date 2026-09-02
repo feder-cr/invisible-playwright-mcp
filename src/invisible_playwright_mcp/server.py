@@ -97,21 +97,30 @@ async def _retrying(fn, *args, **kwargs):
 
 @mcp.tool()
 async def session_new_page() -> str:
+    """Open a new tab and make it the active one. Returns its page id.
+
+    Tabs persist across calls and across clients, so this is how you keep one
+    page while working on another rather than navigating back and forth."""
     return await _retrying(actions.new_page)
 
 
 @mcp.tool()
 async def session_list_pages() -> str:
+    """Every open tab: id, title, url, and which one is active."""
     return actions.list_pages(await registry.ensure())
 
 
 @mcp.tool()
 async def session_select_page(page_id: str) -> str:
+    """Switch the active tab. Every other browser_* tool acts on it.
+
+    Take the id from session_list_pages or from session_new_page."""
     return actions.select_page(await registry.ensure(), page_id)
 
 
 @mcp.tool()
 async def session_close_page(page_id: str = "") -> str:
+    """Close a tab, or the active one when page_id is left out."""
     return await actions.close_page(await registry.ensure(), page_id)
 
 
@@ -119,11 +128,22 @@ async def session_close_page(page_id: str = "") -> str:
 
 @mcp.tool()
 async def browser_navigate(url: str, wait_until: str = "domcontentloaded") -> str:
+    """Go to a url in the active tab, opening one if none exists.
+
+    wait_until is "domcontentloaded" by default, which returns as soon as the
+    markup is parsed. Use "load" when the page needs its images and stylesheets,
+    or "networkidle" for a single-page app that fetches its content after
+    load."""
     return await _retrying(actions.navigate, url, wait_until=wait_until)
 
 
 @mcp.tool()
 async def browser_read_text(selector: str = "body", max_chars: int = 6000) -> str:
+    """The visible text of an element, with the markup gone.
+
+    The cheapest way to read a page. Narrow the selector when you know where the
+    answer is; use browser_read_html instead when the structure matters, or
+    browser_snapshot when you need something to click."""
     return await actions.read_text(await registry.ensure(), selector, max_chars)
 
 
@@ -164,6 +184,11 @@ async def browser_take_screenshot() -> Image:
 
 @mcp.tool()
 async def browser_click(selector: str) -> str:
+    """Click the first element matching a CSS selector.
+
+    Scrolls it into view and waits for it to be clickable. When no selector can
+    describe the target, use browser_click_at with coordinates from
+    browser_snapshot."""
     return await actions.click(await registry.ensure(), selector)
 
 
@@ -180,16 +205,28 @@ async def browser_click_at(x: float, y: float, hold_seconds: float = 0.0) -> Ima
 
 @mcp.tool()
 async def browser_type(selector: str, text: str) -> str:
+    """Fill a field, replacing whatever it holds.
+
+    This sets the value rather than typing key by key, so it will not fire the
+    per-keystroke handlers an autocomplete needs. For those, click the field and
+    use browser_press_key."""
     return await actions.type_text(await registry.ensure(), selector, text)
 
 
 @mcp.tool()
 async def browser_press_key(key: str) -> str:
+    """Press a key on whatever has focus: "Enter", "Tab", "Escape",
+    "ArrowDown", "Control+a", or a single character."""
     return await actions.press_key(await registry.ensure(), key)
 
 
 @mcp.tool()
 async def browser_evaluate(expression: str) -> str:
+    """Run a JavaScript expression in the page and return the result as JSON.
+
+    The escape hatch for what the other tools do not cover: reading a computed
+    style, a value held in a framework's state, or the length of a list. Prefer
+    a named tool when one fits, because this one can change the page."""
     return await actions.evaluate(await registry.ensure(), expression)
 
 

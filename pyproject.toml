@@ -45,5 +45,5 @@ packages = ["src/invisible_playwright_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["e2e: avvia processi veri (server + browser); si salta se il server non c'e'"]
+markers = ["e2e: starts real processes (a server and a browser); skipped when no server is listening"]
 asyncio_mode = "auto"
