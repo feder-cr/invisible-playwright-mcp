@@ -63,6 +63,12 @@ acts on the first match without complaining, so aiming at the third of five
 identical links quietly hit the first. Elements no selector can reach carry `at`
 instead, the centre coordinates, for `browser_click_at`.
 
+When an element has none of those, the selector falls back to `data-testid` and
+then to a unique `aria-label`, which together took coverage from 90.5% of
+elements to 97.9%. It stops there: a text-based selector is not stable, and a
+handle that sometimes points elsewhere is the thing this exists to remove. What
+is left carries `at` and nothing else.
+
 A link addressed by its href has no separate `href` field, because the selector
 already holds it: `a[href='/cart']` says where the link goes as plainly as the
 field did, and not repeating it is what kept this affordable (+47% of the

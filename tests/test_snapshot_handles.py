@@ -30,6 +30,15 @@ CASES = {
     "duplicate ids": ("<span id='same' role='button'>one</span>"
                       "<span id='same' role='button'>two</span>", 2),
     "a quote inside the value": ('<input name="e\'mail">', 1),
+    # Appended to the handle order rather than woven into it, so nothing that
+    # already worked changed. 9.5% of elements had no handle at all and fell
+    # back on coordinates; of those, 58% carried a data-testid - an attribute
+    # whose whole purpose is to be a stable unique handle - and a further
+    # quarter an aria-label that was unique on the page.
+    "a test id": ("<button data-testid='send'>Send</button>", 1),
+    "duplicate test ids": ("<button data-testid='r'>a</button>"
+                           "<button data-testid='r'>b</button>", 2),
+    "an aria-label only": ("<div role='button' aria-label='Close'>x</div>", 1),
 }
 
 
@@ -169,3 +178,14 @@ def test_an_ambiguous_selector_silently_clicks_the_first_match(page):
     page.click(":nth-match(a[href='/d'], 3)", timeout=5000)
     assert page.evaluate("() => window.__hit") == "terzo", (
         "the disambiguated handle no longer reaches the element it names")
+
+
+@pytest.mark.e2e
+def test_an_element_with_nothing_at_all_gets_no_handle_rather_than_a_bad_one(page):
+    """The fallbacks stop where guessing would start. A bare button with only
+    its text gets `at` and no selector, because a text-based selector is not
+    stable and a handle that sometimes points elsewhere is the defect this whole
+    file exists to remove."""
+    element = _load(page, "<button>bare</button>")[0]
+    assert "selector" not in element
+    assert element["at"], "with no selector there must at least be a coordinate"
