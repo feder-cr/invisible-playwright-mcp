@@ -125,8 +125,31 @@ SNAPSHOT_JS = """() => {
     // null on every position:fixed element - the cookie banner, the sticky bar,
     // the button inside a modal - and it says nothing about visibility:hidden or
     // about an element parked at left:-9999px.
+    // How many elements could not be measured at all. It is REPORTED, and that
+    // is the whole point of counting it.
+    //
+    // The first version of this guard just returned false, which turned a loud
+    // failure into a silent one: a page that replaces
+    // Element.prototype.getBoundingClientRect - the exact threat the comment
+    // below names - made shown() answer false for EVERY element, and the tool
+    // returned an empty list with no error, byte-identical to a page that
+    // genuinely has no controls. That is worse than the crash it replaced,
+    // because the crash at least named its cause.
+    //
+    // With the count, the two cases separate on sight: one odd element leaves
+    // 199 results and `unmeasurable: 1`, while a shadowed prototype leaves zero
+    // results and `unmeasurable: 412`.
+    let unmeasurable = 0;
+
     function shown(el) {
-        const r = el.getBoundingClientRect();
+        // getBoundingClientRect can fail to give a rectangle on a real page:
+        // measured on one, the snapshot died with "can't access property
+        // width, r is undefined" and the caller got NOTHING for the whole
+        // document. A page can shadow or replace this method, and some do.
+        // One odd element must not cost the other two hundred.
+        let r = null;
+        try { r = el.getBoundingClientRect(); } catch (err) { unmeasurable++; return false; }
+        if (!r || typeof r.width !== 'number') { unmeasurable++; return false; }
         if (r.width <= 0 || r.height <= 0) return false;
         const s = getComputedStyle(el);
         if (s.visibility === 'hidden' || s.display === 'none') return false;
@@ -136,6 +159,30 @@ SNAPSHOT_JS = """() => {
         // something without hiding it. Below the fold is NOT excluded, because
         // the page may simply be long and that content is still real.
         if (r.right <= 0 || r.bottom <= 0) return false;
+        // Clipped to nothing. This is how a "skip to content" link hides until
+        // it is focused, and it is the same kind of invisible as
+        // visibility:hidden two lines up - the rule this function already
+        // applies, just written a different way in CSS.
+        //
+        // Measured: two of three failed clicks on real pages were skip links
+        // reported as visible. Playwright spends its whole timeout on one, 208
+        // attempts over 15 seconds, and hands back an opaque failure. Reporting
+        // an element nobody can click is not information, it is a trap.
+        //
+        // ⛔ NOT for form controls, and that exception is the whole difficulty.
+        // A file input and a custom checkbox are hidden by exactly this markup
+        // on an enormous share of the web - the visible affordance is a styled
+        // <label> over the top - and they stay fully operable: Playwright can
+        // check() and set_input_files() them, and a click on the label reaches
+        // them. Excluding those would cost an agent the ability to tick a
+        // consent box or upload a file, which is a worse loss than the skip
+        // link this rule exists to remove. A skip link is an <a>.
+        const control = /^(input|select|textarea|button)$/.test(el.tagName.toLowerCase());
+        if (!control) {
+            if (s.clipPath && /inset\\(\\s*(?:50|100)%/.test(s.clipPath)) return false;
+            if (s.clip && /rect\\(\\s*0(?:px)?[,\\s]/.test(s.clip)) return false;
+            if (r.width <= 1 && r.height <= 1 && s.overflow === 'hidden') return false;
+        }
         return true;
     }
 
@@ -219,7 +266,12 @@ SNAPSHOT_JS = """() => {
     // character cap wearing a different name.
     const seen = new Set();
     const out = [];
+    // The body is wrapped because one element must never cost the page. A real
+    // page killed the whole snapshot from inside getBoundingClientRect, and the
+    // caller received nothing at all - which is worse than any partial answer,
+    // and indistinguishable from a page with no controls on it.
     for (const el of document.querySelectorAll(SEL)) {
+      try {
         if (seen.has(el)) continue;
         seen.add(el);
         if (!shown(el)) continue;
@@ -257,8 +309,14 @@ SNAPSHOT_JS = """() => {
         // every time costs bytes without informing anyone.
         if (!(r.top < innerHeight && r.left < innerWidth)) e.off_screen = true;
         out.push(e);
+      } catch (err) { unmeasurable++; }
     }
-    return { title: document.title, url: location.href, interactive_elements: out };
+    const answer = { title: document.title, url: location.href, interactive_elements: out };
+    // Emitted only when it happened, and emitted HERE rather than added by the
+    // Python side: with no cap the snapshot returns this object verbatim, so a
+    // counter added later would never reach the caller on the default path.
+    if (unmeasurable) answer.unmeasurable = unmeasurable;
+    return answer;
 }"""
 
 
@@ -289,9 +347,9 @@ async def read_html(session, mode: str = "form") -> str:
     never written to. The string that comes back is then cleaned in Python,
     where the structural work is testable without a browser.
 
-    Measured over a corpus of real pages: 8.9 MB of markup became 223 KB, 97%
-    smaller, with every one of the 1,204 interactive elements still present, and
-    a median of 10 ms per page.
+    Measured over a corpus of real pages: 9.6 MB of markup became 293 KB, 97%
+    smaller, with every one of the 1,453 interactive elements still present, and
+    a median of 48 ms per page.
 
     mode="form"  the interactive surface plus the text that explains it
     mode="text"  the prose, with the markup gone
@@ -312,8 +370,63 @@ async def screenshot_png(session) -> bytes:
 
 # --- acting ----------------------------------------------------------------
 
+DIAGNOSE_JS = """(sel) => {
+    // Why a click could not land. Runs only after one has failed, so it can
+    // afford to look properly.
+    let n = [];
+    try { n = document.querySelectorAll(sel); } catch (err) { return {bad_selector: true}; }
+    if (!n.length) return {matches: 0};
+    const el = n[0];
+    const r = el.getBoundingClientRect();
+    const out = {matches: n.length, width: Math.round(r.width), height: Math.round(r.height)};
+    const s = getComputedStyle(el);
+    if (s.display === 'none') out.display_none = true;
+    if (s.visibility === 'hidden') out.visibility_hidden = true;
+    if (el.disabled === true) out.disabled = true;
+    if (s.pointerEvents === 'none') out.pointer_events_none = true;
+    if (r.bottom < 0 || r.top > innerHeight) out.off_screen = true;
+    // The one that matters most: something else is on top. Report WHAT, because
+    // the caller's next move is to deal with that thing.
+    const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+    if (cx >= 0 && cy >= 0 && cx < innerWidth && cy < innerHeight) {
+        const hit = document.elementFromPoint(cx, cy);
+        if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) {
+            out.covered_by = {
+                tag: hit.tagName.toLowerCase(),
+                id: hit.id || undefined,
+                cls: (hit.className && hit.className.toString().slice(0, 60)) || undefined,
+                text: (hit.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, 60) || undefined,
+                position: getComputedStyle(hit).position
+            };
+        }
+    }
+    return out;
+}"""
+
+
 async def click(session, selector: str) -> str:
-    await session.page().click(selector, timeout=15_000)
+    """Click an element, and say what stopped it when nothing happens.
+
+    Playwright reports a failed click as "not actionable in 15s after N
+    attempts", which tells a caller that something is wrong and nothing about
+    what. Measured across eighteen real sites, four clicks failed and every one
+    of them failed that way: a logo, a footer link, a shipping button. Fifteen
+    seconds spent to learn nothing.
+
+    So a failure asks the page why. The answer a caller can act on is
+    `covered_by`: if a cookie banner is sitting over the button, the next move
+    is to dismiss the banner, and that is a different action from retrying.
+    """
+    try:
+        await session.page().click(selector, timeout=15_000)
+    except Exception as exc:
+        try:
+            why = await session.page().evaluate(DIAGNOSE_JS, selector)
+        except Exception:
+            why = None
+        if why:
+            raise RuntimeError(f"{exc}\n\nwhy the click did not land: {json.dumps(why)}") from exc
+        raise
     return f"clicked {selector}"
 
 

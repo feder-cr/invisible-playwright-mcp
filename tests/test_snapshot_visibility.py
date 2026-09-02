@@ -84,9 +84,18 @@ def test_the_snapshot_does_not_write_to_the_page():
 
 def test_visibility_rules_are_expressed_once_each():
     """A rule written twice drifts. This is a shape check on the filter being
-    one function rather than copied per branch."""
-    js = actions.SNAPSHOT_JS
-    assert js.count("getBoundingClientRect") <= 2
+    one function rather than copied per branch.
+
+    Counted on the CODE. The first version counted the raw string and went red
+    the day a comment explained why getBoundingClientRect needs a guard: four
+    occurrences, of which two were prose. Every other check in this file already
+    strips comments for the same reason, and this one was the exception that
+    proved it mattered.
+    """
+    js = _code(actions.SNAPSHOT_JS)
+    assert js.count("getBoundingClientRect") <= 2, (
+        f"the rectangle is read {js.count('getBoundingClientRect')} times in "
+        "code; the filter is being copied per branch")
 
 
 def test_the_snapshot_does_not_deduplicate():
