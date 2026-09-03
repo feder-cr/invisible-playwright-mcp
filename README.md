@@ -181,10 +181,10 @@ pointer there rather than teleporting, and optionally holds before releasing -
 for a slider, a canvas-drawn challenge, or a press-and-hold.
 
 `browser_snapshot` returns the title, the url and the visible interactive
-elements rather than the accessibility tree, each with a `selector` you can pass
-straight to `browser_click` or `browser_type`, or `at: [x, y]` coordinates when no
-selector can reach it. `browser_read_html` returns reduced markup instead, for
-when the structure is what matters.
+elements rather than the accessibility tree. Every element carries `at: [x, y]`,
+its centre in the viewport, and a `selector` as well when one can reach it -
+pass that straight to `browser_click` or `browser_type`. `browser_read_html`
+returns reduced markup instead, for when the structure is what matters.
 
 Tool names mirror the Microsoft Playwright MCP, so prompts written for it work
 here too.
@@ -192,14 +192,20 @@ here too.
 **Why each of those returns what it does**, with the measurements behind it:
 [docs/tool-design.md](docs/tool-design.md).
 
-## Watching it work, and more than one client
+## More than one client on the same browser
 
 Over stdio the browser belongs to the client that opened it. Set
 `STEALTHFOX_MCP_TRANSPORT=http` and it does not: the session is owned by the
 server, so a second client can attach to the browser the first one left open,
 and closing a client no longer kills the browser.
 
-    STEALTHFOX_MCP_TRANSPORT=http uvx invisible-playwright-mcp
+To SEE the browser rather than share it, use
+[AIHawk](https://github.com/feder-cr/AIHawk) from column 2, which shows the live
+page beside the conversation.
+
+```bash
+STEALTHFOX_MCP_TRANSPORT=http uvx invisible-playwright-mcp
+```
 
 ## Notes
 
@@ -208,4 +214,5 @@ and closing a client no longer kills the browser.
 
 ## License
 
-See the engine project, [`invisible-playwright`](https://github.com/feder-cr/invisible_playwright).
+[MIT](https://github.com/feder-cr/invisible-playwright-mcp/blob/main/LICENSE),
+the same as the engine it wraps.
