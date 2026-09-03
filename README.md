@@ -28,13 +28,7 @@ irm https://astral.sh/uv/install.ps1 | iex                   # Windows
 model and you add this browser to it. If no, or if you would rather watch the work
 happen, there is an interface that brings a model too.
 
-<table>
-<tr>
-<th width="50%">1. Add it to the assistant you have</th>
-<th width="50%">2. Run the interface instead</th>
-</tr>
-<tr>
-<td valign="top">
+### 1. Add it to the assistant you have
 
 **This package.** Your assistant brings the model.
 
@@ -44,9 +38,8 @@ Claude Code, once for every project on the machine:
 claude mcp add -s user stealth -- uvx invisible-playwright-mcp
 ```
 
-Drop `-s user` if you want it in the current project only.
-
-Check it took, before trusting it:
+Drop `-s user` if you want it in the current project only. Then check it took,
+before trusting it:
 
 ```bash
 claude mcp list
@@ -54,8 +47,7 @@ claude mcp list
 
 For Claude Desktop, Cursor and the rest, see **Config file** below.
 
-</td>
-<td valign="top">
+### 2. Run the interface instead
 
 **[AIHawk](https://github.com/feder-cr/AIHawk).** No assistant needed. Bring an
 [OpenRouter](https://openrouter.ai) account and its key, get a page with the chat
@@ -69,10 +61,6 @@ Open **http://127.0.0.1:8765**.
 
 It is a client of this server like any other, with no private path to the page -
 which is the reason to believe the tools below are enough to build on.
-
-</td>
-</tr>
-</table>
 
 ## The download nobody warns you about
 
