@@ -109,11 +109,28 @@ async def navigate(session, url: str, wait_until: str = "domcontentloaded") -> s
 
 
 async def read_text(session, selector: str = "body", max_chars: int = DEFAULT_MAX_CHARS) -> str:
+    """The visible text of an element, and an honest word when it did not fit.
+
+    ⛔ THE CUT USED TO BE SILENT, alone among the capped actions. `json_capped`
+    returns `{"truncated": true, "chars": N}` and `capped_elements` reports how
+    many elements it dropped, but this one simply sliced. A caller then read
+    prose that stopped mid-sentence with nothing to distinguish it from a page
+    that really ends there, and the natural next move - answering from what came
+    back - is answering from a fragment while believing it is the whole thing.
+
+    A cap is fine; a cap nobody can see is not.
+    """
     txt = await session.page().evaluate(
         "(sel) => { const el = document.querySelector(sel);"
         " return el ? el.innerText : null; }", selector,
     )
-    return f"(no element matches {selector!r})" if txt is None else txt[:max_chars]
+    if txt is None:
+        return f"(no element matches {selector!r})"
+    if len(txt) <= max_chars:
+        return txt
+    return txt[:max_chars] + (
+        "\n\n[cut after %d of %d characters. Raise max_chars, or narrow the "
+        "selector to the part you need.]" % (max_chars, len(txt)))
 
 
 SNAPSHOT_JS = """() => {
@@ -561,8 +578,22 @@ _BY_SCRIPT = (
      "browser_click, or browser_click_at when no selector describes the target"),
     (re.compile(r"""\.dispatchEvent\s*\("""),
      "browser_click, browser_type or browser_press_key - whichever interaction you are synthesising, there is a tool that produces it for real"),
-    (re.compile(r"""\.submit\s*\("""),
+    (re.compile(r"""\.(?:submit|requestSubmit)\s*\("""),
      "browser_click on the form's submit button"),
+    # The five below were measured passing on 2026-09-04: they are the ordinary
+    # modern spellings of the same acts, not exotic ones. `requestSubmit` above
+    # is the same story - it is what `submit()` has become, and only the older
+    # name was refused.
+    (re.compile(r"""\.setAttribute\s*\(\s*['"](?:value|checked|selected|disabled)['"]"""),
+     "browser_type for a text field, browser_select_option for a dropdown, "
+     "browser_click for a checkbox or a radio"),
+    (re.compile(r"""Object\s*\.\s*assign\s*\("""),
+     "browser_type, browser_select_option or browser_click - whichever of those "
+     "properties you are setting, a tool sets it for real"),
+    (re.compile(r"""Reflect\s*\.\s*set\s*\("""),
+     "browser_type, browser_select_option or browser_click"),
+    (re.compile(r"""\.execCommand\s*\("""),
+     "browser_type, which types into the focused field through the keyboard"),
 )
 
 

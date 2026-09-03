@@ -30,8 +30,8 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP, Image
 
-from . import actions
-from .registry import DEFAULT_SESSION_ID, SessionRegistry
+from . import actions, identity, plan
+from .registry import SessionRegistry
 
 # Kept for callers that imported it from here. The implementation moved.
 _json_capped = actions.json_capped
@@ -96,12 +96,19 @@ Try things in this order. It matters, because a page can tell the difference.
 
 4. browser_evaluate, to READ what none of the above can see.
 
-browser_evaluate will not act on the page, and asking it to is refused.
-Assigning to value, checked or selected, or calling click(), dispatchEvent() or
-submit(), skips the keyboard and the pointer: the event arrives with
-isTrusted false, which is the single clearest signal that something other than a
-person is driving, and avoiding it is what this browser is for. When you want
-that, rung 2 or rung 3 is what you actually want.
+browser_evaluate refuses the obvious ways to act on the page, and names the tool
+to use instead: assigning to value, checked or selected, or calling click(),
+dispatchEvent(), submit() or requestSubmit(). All of those skip the keyboard and
+the pointer, so the event arrives with isTrusted false - the single clearest
+signal that something other than a person is driving, and avoiding it is what
+this browser is for. When you want that, rung 2 or rung 3 is what you actually
+want.
+
+That refusal is a guardrail on the obvious road, not a wall around the field.
+JavaScript has unlimited ways to say the same thing and this catches the ones
+worth catching, so DO NOT read a silent pass as permission: if you find a way to
+change the page through browser_evaluate, that is the bug, and saying so in your
+answer is worth more than using it.
 
 You do not need script to read state back, either. The snapshot carries
 `checked` for a checkbox or radio and `value` for a select, alongside the text.
@@ -112,10 +119,6 @@ in a way that gets the session blocked."""
 
 
 mcp = FastMCP("stealth", instructions=INSTRUCTIONS, lifespan=_lifespan)
-
-
-async def _ensure_session(session_id: str = DEFAULT_SESSION_ID):
-    return await registry.ensure(session_id)
 
 
 async def _retrying(fn, *args, **kwargs):
@@ -132,6 +135,104 @@ async def _retrying(fn, *args, **kwargs):
         await registry.drop()
         session = await registry.ensure()
         return await fn(session, *args, **kwargs)
+
+
+# --- who is browsing -------------------------------------------------------
+
+@mcp.tool()
+async def session_status() -> str:
+    """Who is browsing right now: the identity, the exit, the profile and the tabs.
+
+    Ask whenever you need to know which person the browser currently is, or from
+    where its traffic leaves. The seed is what you would pass to `session_start`
+    to become this person again, so this is also how you record a session that
+    is worth repeating.
+
+    It starts nothing. If no browser is running yet it says so, because until
+    one is running there is no identity to report.
+    """
+    config = registry.config()
+    if config is None:
+        return ("no browser is running yet, so there is no identity to report. "
+                "The next tool that needs a page will start one, or call "
+                "session_start to choose who it is.")
+
+    session = registry.peek()
+    tabs = "no tabs open"
+    if session is not None:
+        try:
+            rows = await session.describe_pages()
+            tabs = ", ".join(
+                "%s%s %s" % (r["id"], "*" if r["active"] else "", r["url"] or "blank")
+                for r in rows) or "no tabs open"
+        except Exception:
+            tabs = "tabs unreadable"
+    else:
+        tabs = "the browser is not up; the next tool restarts it as this person"
+
+    return plan.describe(config) + " tabs: %s." % tabs
+
+
+@mcp.tool()
+async def session_start(seed: int | None = None, proxy: str | None = None,
+                        profile: str | None = None) -> str:
+    """Start a browsing session as a particular person, and say who that is.
+
+    Call this when you want to control WHO is browsing: a fresh stranger, the
+    same person as last time, or a saved profile that is already logged in
+    somewhere. Calling it closes whatever browser is open and starts another,
+    so anything not saved in a profile is gone.
+
+    You do not have to call it at all. The first tool that needs a page starts a
+    session on its own; `session_status` then tells you who that turned out to
+    be.
+
+    There is only ONE browser. Two identities are visited in turn, never at the
+    same time, so a task that needs both accounts live at once cannot be done
+    here and is worth saying so rather than half-starting.
+
+    seed     the browser identity. Same seed, same fingerprint, every time.
+             Leave it out and one is drawn, and the answer tells you which, so
+             you can ask for it again later.
+    profile  a directory that keeps cookies and logins between sessions. A
+             profile also KEEPS ITS SEED: the first session on a new one stores
+             the identity inside it, and every session after reuses it, so a
+             login does not come back wearing different hardware. Pass "" to
+             insist on no profile at all, which is how you get sessions a site
+             cannot link to each other. A relative path is resolved against the
+             server's own directory, so the answer reports the full path it
+             used.
+    proxy    where the traffic goes out, as `http://user:pass@host:port` or
+             `socks5://host:port`. Pass "" to insist on going out from this
+             machine's own address. A profile does NOT pin its exit the way it
+             pins its seed: timezone, locale and geography come from the exit,
+             so the same login arriving from another country is as visible as
+             one arriving on different hardware. You are warned when a profile's
+             exit changes, but only when YOU change it - a provider that rotates
+             its own addresses behind one host and port looks identical here.
+    """
+    try:
+        chosen = plan.plan_session(seed, proxy, profile, os.environ)
+    except (identity.IdentityConflict, ValueError) as exc:
+        # Refused, not guessed. Every case here is one where continuing would
+        # hand the caller a different person than the one they asked for, and
+        # the old session is deliberately left running: a refusal must not cost
+        # somebody the browser they already had.
+        return "refused: %s" % exc
+
+    try:
+        await registry.restart(**chosen.kwargs)
+    except Exception as exc:
+        # ⛔ Said plainly, because the dangerous reading is "that failed, carry
+        # on". Nothing is running now, and every later tool will repeat this
+        # refusal rather than quietly starting a browser without the exit that
+        # was asked for.
+        return ("the session did NOT start: %s\n"
+                "Nothing is browsing, and the tools will keep refusing until a "
+                "session_start works. A proxy that is down is the usual cause; "
+                "try another exit, or pass proxy=\"\" to go out from this "
+                "machine knowing that is what you are doing." % exc)
+    return "session started. " + chosen.describe()
 
 
 # --- pages -----------------------------------------------------------------
@@ -187,7 +288,10 @@ async def browser_read_text(selector: str = "body", max_chars: int = 6000) -> st
 
     The cheapest way to read a page. Narrow the selector when you know where the
     answer is; use browser_read_html instead when the structure matters, or
-    browser_snapshot when you need something to click."""
+    browser_snapshot when you need something to click.
+
+    Long text is cut at max_chars (6000 by default) and the cut is marked in
+    what comes back, so text that ends without that marker is the whole thing."""
     return await actions.read_text(await registry.ensure(), selector, max_chars)
 
 
@@ -223,6 +327,13 @@ async def browser_read_html(mode: str = "form") -> str:
     mode="form" keeps the interactive surface and the text explaining it,
     mode="text" returns the prose alone, mode="full" keeps the structure with
     the noise and the attribute soup removed.
+
+    Unlike browser_read_text this is NOT capped: it returns the whole reduced
+    page, which on a large one is tens of thousands of characters. That is
+    deliberate, because cutting markup in the middle leaves tags that no longer
+    mean anything - but it means the answer can be long. Reach for
+    browser_snapshot when you only need something to click, or
+    browser_read_text when you only need the words.
     """
     return await actions.read_html(await registry.ensure(), mode)
 
@@ -306,12 +417,17 @@ async def browser_evaluate(expression: str) -> str:
     For what the other tools cannot see: a computed style, a value held in a
     framework's state, the length of a list.
 
-    It will not act. Assigning to `value`, `checked` or `selected`, or calling
-    `click()`, `dispatchEvent()` or `submit()`, is refused - those change the
-    page without a real keystroke or pointer, and a page can tell. Use
-    browser_click, browser_type or browser_select_option instead; they do the
-    same thing through the pointer and the keyboard. Reading any of those
-    properties is fine."""
+    Acting on the page is refused, and the refusal names the tool to use.
+    Assigning to `value`, `checked` or `selected`, or calling `click()`,
+    `dispatchEvent()`, `submit()` or `requestSubmit()`, changes the page without
+    a real keystroke or pointer, and a page can tell. Use browser_click,
+    browser_type or browser_select_option instead; they do the same thing
+    through the pointer and the keyboard. Reading any of those properties is
+    fine.
+
+    The refusal catches the obvious spellings, not every possible one. A script
+    that slips past it is still the wrong way to do the thing: report it in your
+    answer rather than using it."""
     return await actions.evaluate(await registry.ensure(), expression)
 
 

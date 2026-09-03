@@ -60,8 +60,17 @@ Tool names mirror the Microsoft Playwright MCP, so prompts written for it work h
 
 The README states the four rungs. This is what they cost and what they bought.
 
-This is a pattern check on the obvious road, not a sandbox, and it is not
-described as one. What makes the refusal reasonable is the rest of the ladder:
+This is a pattern check on the obvious road, not a sandbox. That sentence used
+to end "and it is not described as one", which was false of the only text a
+model actually reads: the instructions block said `browser_evaluate will not act
+on the page` and the tool docstring said `It will not act`. Measured 2026-09-04,
+thirteen of fifteen ordinary acting expressions passed the guard, `requestSubmit`
+among them - the modern spelling of the one call that was refused. Both texts now
+say what the code does and add the sentence that matters, which is that a script
+slipping past the check is a bug to report rather than a licence to use it. A
+model told the door is locked has no reason to avoid the handle.
+
+What makes the refusal reasonable is the rest of the ladder:
 measured on the same task, the same model went from 14 steps with two
 `browser_evaluate` calls - one of them setting a `<select>` from script - to 8
 steps with none, three runs out of three.

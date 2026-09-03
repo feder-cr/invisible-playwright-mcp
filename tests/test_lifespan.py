@@ -14,7 +14,7 @@ import pytest
 
 
 class _FakeSession:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.closed = False
         self._browser = None
         self._context = object()

@@ -213,7 +213,8 @@ between what the browser says it is and where it appears to be.
 | Variable | Meaning |
 |---|---|
 | `STEALTHFOX_PROXY` | Proxy URL, e.g. `http://user:pass@proxy.example.com:8080` or `socks5://proxy.example.com:1080`. Host and port are both required. Bring your own. With it set, the session's timezone, locale and egress are derived from the proxy. |
-| `STEALTHFOX_SEED` | Integer seed for a deterministic fingerprint (same seed, same identity). |
+| `STEALTHFOX_NO_PROXY` | `1` to go out from this machine's own address even when `STEALTHFOX_PROXY` is set. |
+| `STEALTHFOX_SEED` | Integer seed for a deterministic fingerprint (same seed, same identity). A profile's own seed wins over this one. |
 | `STEALTHFOX_PROFILE_DIR` | A directory for a persistent profile, so logins survive across runs. |
 | `STEALTHFOX_BINARY` | Path to an engine binary you already have. It must be the build the packaged seal pins, or startup refuses. |
 | `STEALTHFOX_HEADLESS` | `0` to run headed; headless by default. |
@@ -223,7 +224,35 @@ between what the browser says it is and where it appears to be.
 
 ## Tools
 
-`session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_read_html`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_take_screenshot`, `browser_select_option`.
+`session_start`, `session_status`, `session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_read_html`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_take_screenshot`, `browser_select_option`.
+
+### Who is browsing
+
+You can ignore this entirely. Say nothing and every session is a different
+stranger, which is the right default.
+
+When you do care, `session_start` chooses the person and `session_status` tells
+you who you currently are. There is one browser, so two identities are visited
+in turn rather than at once.
+
+- **`seed`** is the identity. The same seed is the same fingerprint every time.
+  Leave it out and one is drawn for you, and the answer says which, so a session
+  worth repeating can be repeated.
+- **`profile`** is a directory holding cookies and logins. **A profile also owns
+  its seed**: the first session on a new one stores the identity inside it and
+  every session after reuses it, so a login never comes back wearing different
+  hardware. Ask for a seed that contradicts the one a profile carries and you get
+  a refusal naming both numbers, never a silent choice between them.
+- **`proxy`** is where the traffic leaves. Pass `""` to either of the last two to
+  insist on *none*, which is how you get sessions a site cannot link together
+  even when the environment sets a default.
+
+**A profile does not own its exit the way it owns its seed.** Timezone, locale
+and geography come from the exit, so the same login arriving from another country
+is as visible as one arriving on different hardware. You are warned when a
+profile's exit changes - but only when *you* change it. A provider rotating its
+own addresses behind one host and port is indistinguishable from here, and no
+warning should be read as saying otherwise.
 
 ### The order to try them in
 
