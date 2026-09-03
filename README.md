@@ -9,72 +9,91 @@ a real Firefox patched at the C++ source, and hands your client the usual browse
 tools: navigate, click, type, read, screenshot. The fingerprint is set inside the
 engine, not bolted onto the page.
 
-# Pick one
+## First, one prerequisite
 
-There are two ways to use this, and the only real question is **where the model
-comes from**.
+**Python 3.11 or newer**, on **Windows (x86_64) or Linux (x86_64, arm64)** - macOS
+is not supported, the last engine build for it was `firefox-20`. Then
+[uv](https://docs.astral.sh/uv/), because the command below starts with `uvx`:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh              # Linux
+```
+```powershell
+irm https://astral.sh/uv/install.ps1 | iex                   # Windows
+```
+
+## Then pick one
+
+**Do you already use an AI assistant that can run tools?** If yes, it brings the
+model and you add this browser to it. If no, or if you would rather watch the work
+happen, there is an interface that brings a model too.
 
 <table>
 <tr>
-<th width="50%">1. Your AI client already has a model</th>
-<th width="50%">2. You want an interface, model included</th>
+<th width="50%">1. Add it to the assistant you have</th>
+<th width="50%">2. Run the interface instead</th>
 </tr>
 <tr>
 <td valign="top">
 
-**This package.** Claude Code, Claude Desktop, Cursor, or anything else that
-speaks MCP. The browser shows up as tools it can use.
+**This package.** Your assistant brings the model.
+
+Claude Code, once for every project on the machine:
 
 ```bash
-claude mcp add stealth -- uvx invisible-playwright-mcp
+claude mcp add -s user stealth -- uvx invisible-playwright-mcp
 ```
 
-Then just talk to your client:
+Drop `-s user` if you want it in the current project only.
 
-> Go to news.ycombinator.com and give me the top five titles.
+Check it took, before trusting it:
+
+```bash
+claude mcp list
+```
+
+For Claude Desktop, Cursor and the rest, see **Config file** below.
 
 </td>
 <td valign="top">
 
-**[AIHawk](https://github.com/feder-cr/AIHawk).** No MCP client needed. Bring an
-[OpenRouter](https://openrouter.ai) key, get a page with the chat on the left and
-the live browser on the right.
+**[AIHawk](https://github.com/feder-cr/AIHawk).** No assistant needed. Bring an
+[OpenRouter](https://openrouter.ai) account and its key, get a page with the chat
+on the left and the live browser on the right.
 
 ```bash
 uvx aihawk ui --openrouter-key sk-or-...
 ```
 
-Then open **http://127.0.0.1:8765**.
+Open **http://127.0.0.1:8765**.
+
+It is a client of this server like any other, with no private path to the page -
+which is the reason to believe the tools below are enough to build on.
 
 </td>
 </tr>
 </table>
 
-Same browser either way. AIHawk is a client of this server like any other, with no
-private path to the page, which is the reason to believe the tools below are
-enough to build on.
+## The download nobody warns you about
 
-## Before you start
+The browser is about a quarter of a gigabyte and it is **not** fetched when the
+server is installed, nor when it starts. It arrives on the **first tool call that
+needs a page**, so the first thing you ask your assistant to do sits there, and on
+a slow connection you get a timeout that says nothing about a download.
 
-**Python 3.11 or newer**, on **Windows (x86_64) or Linux (x86_64, arm64)**.
-macOS is not supported: no Mac engine has been published since firefox-21. Plus
-[uv](https://docs.astral.sh/uv/), which is what gives you `uvx`:
+Get it over with first, in a terminal where you can watch it:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh              # Linux
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
+uvx invisible-playwright fetch
 ```
 
-`uvx` downloads and runs the server in one step, so there is nothing to install by
-hand. The first run fetches the browser, about 700 MB; it looks like a hang and is
-cached afterwards.
+Cached afterwards, and shared with anything else that uses this engine.
+Per-platform sizes are in the
+[engine's README](https://github.com/feder-cr/invisible_playwright).
 
-No proxy and no account are needed to start. Add a proxy when you want the exit IP
-and the geography to match the fingerprint.
+## Config file
 
-## Any other MCP client
-
-Same server, as a config block. Claude Desktop, Cursor, Windsurf, Continue:
+For any client that takes a JSON block rather than a command:
 
 ```json
 {
@@ -87,7 +106,16 @@ Same server, as a config block. Claude Desktop, Cursor, Windsurf, Continue:
 }
 ```
 
-With a proxy, and anything else from the table below, as `env`:
+Where it goes:
+
+| Client | File |
+|---|---|
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json`, or `.cursor/mcp.json` in the project |
+| Claude Code | `~/.claude.json`, but use `claude mcp add` above instead |
+
+Settings from the table below go in the same block, under `env`:
 
 ```json
 {
@@ -104,20 +132,22 @@ With a proxy, and anything else from the table below, as `env`:
 }
 ```
 
-## Configuration (environment variables)
+## Settings
 
-All optional.
+Environment variables, all optional. A proxy is the one worth adding: without it
+the exit IP, timezone and locale are your own machine's, which is a real gap
+between what the browser says it is and where it appears to be.
 
 | Variable | Meaning |
 |---|---|
-| `STEALTHFOX_PROXY` | Your proxy URL, e.g. `http://user:pass@proxy.example.com:8080`, or `socks5://…`. Bring your own. With it set, the session's timezone, locale and egress are derived from the proxy automatically. |
+| `STEALTHFOX_PROXY` | Proxy URL, e.g. `http://user:pass@proxy.example.com:8080` or `socks5://proxy.example.com:1080`. Host and port are both required. Bring your own. With it set, the session's timezone, locale and egress are derived from the proxy. |
 | `STEALTHFOX_SEED` | Integer seed for a deterministic fingerprint (same seed, same identity). |
 | `STEALTHFOX_PROFILE_DIR` | A directory for a persistent profile, so logins survive across runs. |
-| `STEALTHFOX_BINARY` | Path to a specific engine binary (otherwise fetched automatically). |
+| `STEALTHFOX_BINARY` | Path to an engine binary you already have. It must be the build the packaged seal pins, or startup refuses. |
 | `STEALTHFOX_HEADLESS` | `0` to run headed; headless by default. |
 | `STEALTHFOX_MCP_TRANSPORT` | `http` to serve over streamable HTTP instead of stdio. Default is stdio, which is what MCP clients expect. |
 | `STEALTHFOX_MCP_HOST` | Bind address for the HTTP transport. Default `127.0.0.1`. |
-| `STEALTHFOX_MCP_PORT` | Port for the HTTP transport. Default `8765`. |
+| `STEALTHFOX_MCP_PORT` | Port for the HTTP transport. Default `8765`, which is also the AIHawk interface's default: change one of the two if you run both. |
 
 ## Tools
 
@@ -138,73 +168,29 @@ way down it invents one:
    you can see. For what the snapshot does not list at all.
 4. **`browser_evaluate`**, to READ what none of the above can see.
 
-`browser_evaluate` will not act on the page. Assigning to `value`, `checked` or
-`selected`, or calling `click()`, `dispatchEvent()` or `submit()`, is refused
-with the name of the tool to use instead. Those reach the page with no keystroke
-and no pointer, and the event arrives with `isTrusted` false - which is the
-single clearest signal that something other than a person is driving, and the
-one thing this stack exists not to produce. Reading any of those properties is
-fine; it is assigning and calling that is refused.
+`browser_evaluate` reads; it will not act. Assigning to `value`, `checked` or
+`selected`, or calling `click()`, `dispatchEvent()` or `submit()`, is refused,
+and the refusal names the tool to use instead. Script reaches the page with no
+keystroke and no pointer, so the event carries `isTrusted` false, which is the
+clearest signal a page can collect that nobody is really there. Reading those
+properties is fine.
 
-This is a pattern check on the obvious road, not a sandbox, and it is not
-described as one. What makes the refusal reasonable is the rest of the ladder:
-measured on the same task, the same model went from 14 steps with two
-`browser_evaluate` calls - one of them setting a `<select>` from script - to 8
-steps with none, three runs out of three.
-
-The snapshot carries the state as well as the shape: `checked` for a checkbox or
-radio, `value` for a select, alongside the text. That half matters as much as
-the tools. The run above reached for script to READ the form back before it ever
-reached for script to write it, and a gap in what a caller can see is answered
-with `evaluate` just as surely as a gap in what it can do.
 
 `browser_click_at` takes viewport coordinates instead of a selector, moves the
-pointer there rather than teleporting, optionally holds before releasing, and
-returns a screenshot of what happened - for a slider, a canvas-drawn challenge,
-or a press-and-hold.
+pointer there rather than teleporting, and optionally holds before releasing -
+for a slider, a canvas-drawn challenge, or a press-and-hold.
 
 `browser_snapshot` returns the title, the url and the visible interactive
-elements rather than the accessibility tree: one country `<select>` on a real
-sign-up page contributes about two hundred `<option>` nodes, which fill the
-character budget before the form does.
+elements rather than the accessibility tree, each with a `selector` you can pass
+straight to `browser_click` or `browser_type`, or `at: [x, y]` coordinates when no
+selector can reach it. `browser_read_html` returns reduced markup instead, for
+when the structure is what matters.
 
-Each element comes with a `selector` when one can reach it, and that string goes
-to `browser_click` or `browser_type` verbatim. It is built to match exactly one
-element, which the obvious selector often does not: measured across 958 elements
-on real pages, 88% could be addressed but only 48% unambiguously, and Playwright
-acts on the first match without complaining, so aiming at the third of five
-identical links quietly hit the first. Elements no selector can reach carry `at`
-instead, the centre coordinates, for `browser_click_at`.
+Tool names mirror the Microsoft Playwright MCP, so prompts written for it work
+here too.
 
-When a click does not land, the error says what stopped it rather than only that
-it timed out: an element covering the target is named, with its id, its class and
-its text, because the next move is to deal with that thing and not to retry. If
-the page has replaced `getBoundingClientRect` so that nothing can be measured,
-the snapshot reports `unmeasurable` with a count instead of an empty list, so a
-tampered page cannot be mistaken for a page with no controls.
-
-When an element has none of those, the selector falls back to `data-testid` and
-then to a unique `aria-label`, which together took coverage from 90.5% of
-elements to 97.9%. It stops there: a text-based selector is not stable, and a
-handle that sometimes points elsewhere is the thing this exists to remove. What
-is left carries `at` and nothing else.
-
-A link addressed by its href has no separate `href` field, because the selector
-already holds it: `a[href='/cart']` says where the link goes as plainly as the
-field did, and not repeating it is what kept this affordable (+47% of the
-payload with the repetition, +15% without). A link addressed by its id keeps its
-href, having nothing duplicated.
-
-`browser_read_html` returns the page's markup instead of a flat list, for when
-the structure is what matters: a form and its labels, a table, what a control is
-wired to. The browser decides what is actually painted, on a clone of the
-document so the live page is never written to, and the markup is then reduced to
-what is worth reading. Measured on real pages, 9.6 MB of markup became 293 KB
-with every one of the 1,453 interactive elements still present. `mode`
-is `form` (the interactive surface and the text explaining it), `text` (the prose
-alone) or `full` (the structure, with the noise and the attribute soup gone).
-
-Tool names mirror the Microsoft Playwright MCP, so prompts written for it work here too.
+**Why each of those returns what it does**, with the measurements behind it:
+[docs/tool-design.md](docs/tool-design.md).
 
 ## Watching it work, and more than one client
 
