@@ -1,18 +1,93 @@
 # invisible-playwright-mcp
 
-A stealth Firefox browser, exposed as an [MCP](https://modelcontextprotocol.io) server, so any AI agent can browse and act on real websites without being blocked by anti-bot systems.
+A stealth Firefox, exposed as an [MCP](https://modelcontextprotocol.io) server, so
+an AI agent can browse and act on real websites without being blocked by anti-bot
+systems.
 
-It wraps [`invisible-playwright`](https://github.com/feder-cr/invisible_playwright) (a real Firefox patched at the C++ source for stealth) and hands your MCP client the usual browser tools: navigate, click, type, read, screenshot. The browser is always launched by the stealth engine, so the fingerprint is set inside the engine, not bolted on.
+It wraps [`invisible-playwright`](https://github.com/feder-cr/invisible_playwright),
+a real Firefox patched at the C++ source, and hands your client the usual browser
+tools: navigate, click, type, read, screenshot. The fingerprint is set inside the
+engine, not bolted onto the page.
 
-## Install (Claude Code)
+# Pick one
 
-One line:
+There are two ways to use this, and the only real question is **where the model
+comes from**.
+
+<table>
+<tr>
+<th width="50%">1. Your AI client already has a model</th>
+<th width="50%">2. You want an interface, model included</th>
+</tr>
+<tr>
+<td valign="top">
+
+**This package.** Claude Code, Claude Desktop, Cursor, or anything else that
+speaks MCP. The browser shows up as tools it can use.
 
 ```bash
-claude mcp add stealth --env STEALTHFOX_PROXY=http://user:pass@host:port -- uvx invisible-playwright-mcp
+claude mcp add stealth -- uvx invisible-playwright-mcp
 ```
 
-Or add it to any MCP client via a config block (Claude Code, Cursor, Claude Desktop):
+Then just talk to your client:
+
+> Go to news.ycombinator.com and give me the top five titles.
+
+</td>
+<td valign="top">
+
+**[AIHawk](https://github.com/feder-cr/AIHawk).** No MCP client needed. Bring an
+[OpenRouter](https://openrouter.ai) key, get a page with the chat on the left and
+the live browser on the right.
+
+```bash
+uvx aihawk ui --openrouter-key sk-or-...
+```
+
+Then open **http://127.0.0.1:8765**.
+
+</td>
+</tr>
+</table>
+
+Same browser either way. AIHawk is a client of this server like any other, with no
+private path to the page, which is the reason to believe the tools below are
+enough to build on.
+
+## Before you start
+
+**Python 3.11 or newer**, on **Windows (x86_64) or Linux (x86_64, arm64)**.
+macOS is not supported: no Mac engine has been published since firefox-21. Plus
+[uv](https://docs.astral.sh/uv/), which is what gives you `uvx`:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh              # Linux
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
+```
+
+`uvx` downloads and runs the server in one step, so there is nothing to install by
+hand. The first run fetches the browser, about 700 MB; it looks like a hang and is
+cached afterwards.
+
+No proxy and no account are needed to start. Add a proxy when you want the exit IP
+and the geography to match the fingerprint.
+
+## Any other MCP client
+
+Same server, as a config block. Claude Desktop, Cursor, Windsurf, Continue:
+
+```json
+{
+  "mcpServers": {
+    "stealth": {
+      "command": "uvx",
+      "args": ["invisible-playwright-mcp"]
+    }
+  }
+}
+```
+
+With a proxy, and anything else from the table below, as `env`:
 
 ```json
 {
@@ -20,19 +95,22 @@ Or add it to any MCP client via a config block (Claude Code, Cursor, Claude Desk
     "stealth": {
       "command": "uvx",
       "args": ["invisible-playwright-mcp"],
-      "env": { "STEALTHFOX_PROXY": "http://user:pass@host:port" }
+      "env": {
+        "STEALTHFOX_PROXY": "http://user:pass@proxy.example.com:8080",
+        "STEALTHFOX_SEED": "4242"
+      }
     }
   }
 }
 ```
 
-`uvx` downloads and runs it in one step; no manual install. The stealth Firefox engine is fetched automatically on first use.
-
 ## Configuration (environment variables)
+
+All optional.
 
 | Variable | Meaning |
 |---|---|
-| `STEALTHFOX_PROXY` | Your proxy URL (`http://…`, `https://…` or `socks5://…`). Bring your own. With it set, the session's timezone, locale and egress are derived from the proxy automatically. |
+| `STEALTHFOX_PROXY` | Your proxy URL, e.g. `http://user:pass@proxy.example.com:8080`, or `socks5://…`. Bring your own. With it set, the session's timezone, locale and egress are derived from the proxy automatically. |
 | `STEALTHFOX_SEED` | Integer seed for a deterministic fingerprint (same seed, same identity). |
 | `STEALTHFOX_PROFILE_DIR` | A directory for a persistent profile, so logins survive across runs. |
 | `STEALTHFOX_BINARY` | Path to a specific engine binary (otherwise fetched automatically). |
@@ -136,20 +214,6 @@ server, so a second client can attach to the browser the first one left open,
 and closing a client no longer kills the browser.
 
     STEALTHFOX_MCP_TRANSPORT=http uvx invisible-playwright-mcp
-
-## Something to watch it with
-
-This package used to serve two pages of its own: a live view of the browser and a
-two-pane chat. Since 0.9.0 it does not. They are in
-[`aihawk`](https://github.com/feder-cr/AIHawk), which brings a model as well, and
-which reaches the browser through the tools above rather than through anything
-private.
-
-The move is worth a sentence because it is a promise about this package. Nothing
-here has a privileged path to the page any more, so the tools above are enough
-to build an interface on - and that is not an assertion, it is how the interface
-that exists is built. A page kept inside the server is a page whose needs quietly
-become the server's requirements.
 
 ## Notes
 
