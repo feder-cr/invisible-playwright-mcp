@@ -204,12 +204,14 @@ To SEE the browser rather than share it, use
 page beside the conversation.
 
 ```bash
-STEALTHFOX_MCP_TRANSPORT=http uvx invisible-playwright-mcp
+STEALTHFOX_MCP_TRANSPORT=http uvx invisible-playwright-mcp        # Linux
+```
+```powershell
+$env:STEALTHFOX_MCP_TRANSPORT = "http"; uvx invisible-playwright-mcp   # Windows
 ```
 
 ## Notes
 
-- **Bring your own proxy.** The engine does the stealth; a residential proxy gives you the matching IP and geography. Without one it still runs, but the exit is your own address.
 - This is a browser, not a captcha solver. It does not solve or bypass challenges for you; it makes an ordinary Firefox session look like a real one.
 
 ## License
