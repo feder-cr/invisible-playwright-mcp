@@ -43,7 +43,42 @@ Or add it to any MCP client via a config block (Claude Code, Cursor, Claude Desk
 
 ## Tools
 
-`session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_read_html`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_take_screenshot`.
+`session_new_page`, `session_list_pages`, `session_select_page`, `session_close_page`, `browser_navigate`, `browser_read_text`, `browser_snapshot`, `browser_read_html`, `browser_click`, `browser_click_at`, `browser_type`, `browser_press_key`, `browser_evaluate`, `browser_take_screenshot`, `browser_select_option`.
+
+### The order to try them in
+
+The server hands every client this ladder, because a model that cannot find a
+way down it invents one:
+
+1. **A named tool with a selector** - `browser_click`, `browser_type`,
+   `browser_select_option`, `browser_press_key`. `browser_snapshot` supplies the
+   selector.
+2. **Coordinates** - the snapshot reports `at: [x, y]` for every element, and
+   `browser_click_at` moves the pointer there. For a canvas, a slider, a map, a
+   widget built out of divs.
+3. **A screenshot** - `browser_take_screenshot`, then `browser_click_at` on what
+   you can see. For what the snapshot does not list at all.
+4. **`browser_evaluate`**, to READ what none of the above can see.
+
+`browser_evaluate` will not act on the page. Assigning to `value`, `checked` or
+`selected`, or calling `click()`, `dispatchEvent()` or `submit()`, is refused
+with the name of the tool to use instead. Those reach the page with no keystroke
+and no pointer, and the event arrives with `isTrusted` false - which is the
+single clearest signal that something other than a person is driving, and the
+one thing this stack exists not to produce. Reading any of those properties is
+fine; it is assigning and calling that is refused.
+
+This is a pattern check on the obvious road, not a sandbox, and it is not
+described as one. What makes the refusal reasonable is the rest of the ladder:
+measured on the same task, the same model went from 14 steps with two
+`browser_evaluate` calls - one of them setting a `<select>` from script - to 8
+steps with none, three runs out of three.
+
+The snapshot carries the state as well as the shape: `checked` for a checkbox or
+radio, `value` for a select, alongside the text. That half matters as much as
+the tools. The run above reached for script to READ the form back before it ever
+reached for script to write it, and a gap in what a caller can see is answered
+with `evaluate` just as surely as a gap in what it can do.
 
 `browser_click_at` takes viewport coordinates instead of a selector, moves the
 pointer there rather than teleporting, optionally holds before releasing, and
@@ -111,7 +146,7 @@ which reaches the browser through the tools above rather than through anything
 private.
 
 The move is worth a sentence because it is a promise about this package. Nothing
-here has a privileged path to the page any more, so the fourteen tools are enough
+here has a privileged path to the page any more, so the tools above are enough
 to build an interface on - and that is not an assertion, it is how the interface
 that exists is built. A page kept inside the server is a page whose needs quietly
 become the server's requirements.

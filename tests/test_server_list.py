@@ -12,6 +12,11 @@ async def test_server_registers_expected_tools():
         "browser_snapshot", "browser_read_html", "browser_click",
         "browser_click_at", "browser_type", "browser_press_key",
         "browser_evaluate", "browser_take_screenshot",
+        # Added in 0.10.0. Its absence was not neutral: with no way to set a
+        # dropdown, a model clicked it, pressed arrow keys blind, and ended up
+        # injecting script to set the value - which changes the page without
+        # it ever seeing a real interaction.
+        "browser_select_option",
     }
     # EXACT, not a subset. `expected <= names` passed while a tool nobody
     # meant to publish sat in the list, and the surface of an MCP server is
