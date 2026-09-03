@@ -17,6 +17,13 @@ async def test_server_registers_expected_tools():
         # injecting script to set the value - which changes the page without
         # it ever seeing a real interaction.
         "browser_select_option",
+        # Added in 0.11.0, and they are one pair rather than two tools.
+        # session_start chooses who is browsing; session_status is the only way
+        # to ASK. Without the second, the identity was reported exactly once, in
+        # the return value of a call the descriptions explicitly say you need
+        # not make - so a model that skipped it, or whose browser was rebuilt
+        # underneath it, had no way to find out who it had become.
+        "session_start", "session_status",
     }
     # EXACT, not a subset. `expected <= names` passed while a tool nobody
     # meant to publish sat in the list, and the surface of an MCP server is

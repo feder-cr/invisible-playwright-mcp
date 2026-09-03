@@ -103,12 +103,19 @@ def read():
     """
     import asyncio
 
+    from invisible_playwright_mcp.plan import plan_session
     from invisible_playwright_mcp.session import StealthSession
 
     srv, url = _serve()
 
     async def run():
-        session = StealthSession()
+        # ⛔ THROUGH plan_session, NOT a bare StealthSession(). The session no
+        # longer falls back to the environment - deciding is the planner's job
+        # and only its job - so a bare one carries no `headless` at all and
+        # launches HEADED. That passes on a desktop and dies on a runner with
+        # `no DISPLAY environment variable specified`, which is how it reached
+        # CI. Building the way production builds is also the honest test.
+        session = StealthSession(**plan_session().kwargs)
         try:
             await session.start()
             await actions.navigate(session, url)

@@ -25,7 +25,7 @@ class _SessionThatFailsOnce:
 
     instances: list = []
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self._browser = None
         self._context = None
         self.started = False
@@ -51,7 +51,7 @@ class _ConnectedBrowser:
 
 
 class _Healthy:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self._browser = _ConnectedBrowser()
         self._context = object()
         self.started = False
@@ -66,7 +66,7 @@ class _Healthy:
 class _AlreadyPoisoned:
     """What a server that has been running since before the fix looks like."""
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self._browser = None
         self._context = None
 

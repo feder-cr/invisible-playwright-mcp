@@ -3,23 +3,40 @@ by InvisiblePlaywright, never Playwright directly, so the full stealth stack
 applies."""
 from __future__ import annotations
 
-import os
 from typing import Any, Optional
 
 from invisible_playwright.async_api import InvisiblePlaywright
 
-from .config import launch_kwargs
-
 
 class StealthSession:
     def __init__(self, **kwargs: Any) -> None:
-        self._kwargs = kwargs or launch_kwargs(os.environ)
+        # ⛔ NO FALLBACK TO THE ENVIRONMENT. This used to be
+        # `kwargs or launch_kwargs(os.environ)`, which made this a THIRD place
+        # that decided how a browser is configured, behind the tool arguments
+        # and `plan_session`. A session now uses what it is handed and nothing
+        # else; deciding is `plan.plan_session`'s job, and only its job.
+        self._kwargs = kwargs
         self._ipw: Optional[InvisiblePlaywright] = None
         self._browser = None
         self._context = None
         self._pages: dict[str, Any] = {}
         self._active: Optional[str] = None
         self._counter = 0
+
+    def resume_numbering_after(self, highest: int) -> None:
+        """Carry tab numbering forward from a session this one replaces.
+
+        ⛔ Tab ids used to restart at `tab-1` on every rebuild, so an id a caller
+        was still holding resolved to a DIFFERENT page instead of erroring -
+        exactly what `page()` below refuses to do for a named tab, on the
+        grounds that acting on the wrong tab with nothing said is worse than an
+        error. A rebuild is common (any failure retries through one), and the
+        identity work that keeps the same person across it also keeps the caller
+        going, so the stale id is more reachable than it was, not less.
+
+        Numbering continues instead, and a stale id now names nothing.
+        """
+        self._counter = max(self._counter, highest)
 
     async def _attach(self, result) -> None:
         """`InvisiblePlaywright.__aenter__()` returns a Browser in ephemeral

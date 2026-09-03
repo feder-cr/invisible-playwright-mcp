@@ -51,6 +51,30 @@ ACTING = [
     "() => document.forms[0].submit()",
     "() => { i.value += 'coda' }",
     "() => { o.selected = true }",
+    # ⛔ Measured 2026-09-04: thirteen of fifteen ordinary acting expressions
+    # walked straight past this guard while the model was being told, in the
+    # instructions block and in the tool's own docstring, that evaluate "will
+    # not act on the page". These are the ordinary modern spellings of the same
+    # acts - `requestSubmit` is simply what `submit()` became, and only the old
+    # name was refused.
+    "() => document.forms[0].requestSubmit()",
+    "() => el.setAttribute('value', 'beta')",
+    "() => el.setAttribute('checked', '')",
+    "() => Object.assign(el, {value: 'beta'})",
+    "() => Reflect.set(el, 'checked', true)",
+    "() => document.execCommand('insertText', false, 'beta')",
+]
+
+# ⛔ KNOWN TO PASS, AND THE POINT IS THAT NOBODY CLAIMS OTHERWISE. This is a
+# pattern check on the obvious road, not a sandbox: JavaScript has unlimited
+# ways to say the same thing, and chasing them one at a time is how a guard
+# grows until it starts refusing reads instead. What makes that acceptable is
+# that the model-facing text now says so and asks for a report rather than
+# implying the door is locked - so this list is the honest edge of the guard,
+# not a backlog.
+KNOWN_TO_PASS = [
+    "() => HTMLElement.prototype.click.call(el)",
+    "() => el.removeAttribute('disabled')",
 ]
 
 # Reading is the whole point of the tool and must keep working. A guard that
@@ -83,6 +107,44 @@ def test_acting_on_the_page_from_script_is_refused(expression):
 @pytest.mark.parametrize("expression", READING)
 def test_reading_the_page_is_not_refused(expression):
     refuse(expression)
+
+
+@pytest.mark.parametrize("expression", KNOWN_TO_PASS)
+def test_what_the_guard_does_not_catch_is_recorded_rather_than_denied(expression):
+    """A gap that is written down is a gap somebody can close. One that is
+    denied in the model-facing text is a gap that gets used.
+
+    If a change makes one of these refuse, delete it from KNOWN_TO_PASS and put
+    it in ACTING. This failing is good news.
+    """
+    refuse(expression)  # does not raise today, and nothing pretends it does
+
+
+def test_the_model_is_not_told_the_guard_is_complete():
+    """⛔ The honesty half, and it is the half that makes the guard work.
+
+    The instructions block said `browser_evaluate will not act on the page` and
+    the docstring said `It will not act`, while the code's own comment said in
+    capitals that it is a pattern check and "must not be described as" a
+    sandbox. Measured 2026-09-04: thirteen of fifteen acting expressions passed.
+    A model that believes the door is locked has no reason to avoid the handle.
+    """
+    import asyncio
+
+    from invisible_playwright_mcp import server
+
+    tools = {t.name: t for t in asyncio.run(server.mcp.list_tools())}
+    surfaces = [server.INSTRUCTIONS, tools["browser_evaluate"].description or ""]
+
+    for text in surfaces:
+        assert "will not act" not in text, (
+            "the model is told the guard is a wall: %r" % text[:200])
+
+    joined = " ".join(surfaces).lower()
+    assert "not a wall" in joined or "not every possible" in joined, (
+        "nothing tells the model the guard is partial")
+    assert "report" in joined or "say so" in joined, (
+        "the model is not asked to report a way around it")
 
 
 def test_the_guard_is_on_the_action_not_on_the_tool():
@@ -215,12 +277,19 @@ def test_the_snapshot_reports_what_the_controls_are_set_to():
     """
     import asyncio
 
+    from invisible_playwright_mcp.plan import plan_session
     from invisible_playwright_mcp.session import StealthSession
 
     srv, url = _serve()
 
     async def run():
-        session = StealthSession()
+        # ⛔ THROUGH plan_session, NOT a bare StealthSession(). The session no
+        # longer falls back to the environment - deciding is the planner's job
+        # and only its job - so a bare one carries no `headless` at all and
+        # launches HEADED. That passes on a desktop and dies on a runner with
+        # `no DISPLAY environment variable specified`, which is how it reached
+        # CI. Building the way production builds is also the honest test.
+        session = StealthSession(**plan_session().kwargs)
         try:
             await session.start()
             await actions.navigate(session, url)
