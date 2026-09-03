@@ -294,3 +294,30 @@ def test_the_exit_is_reported_as_a_value(tmp_path):
 def test_a_proxy_password_is_never_in_the_answer():
     result = plan.plan_session(proxy="socks5://user:hunter2@exit-a.invalid:1080", env={})
     assert "hunter2" not in result.describe()
+
+
+def test_a_bare_session_carries_no_settings_at_all():
+    """⛔ THE CONTRACT THAT SENDS EVERY CALLER THROUGH THE PLANNER, and it cost a
+    red CI to write down.
+
+    `StealthSession.__init__` used to fall back to `launch_kwargs(os.environ)`,
+    which made it a third place that decided how a browser is configured. Removing
+    that was right - deciding is this module's job and only its job - but it means
+    a bare `StealthSession()` now carries NOTHING, including no `headless`, so it
+    launches HEADED. That passes on any desktop and dies on a runner with
+    `no DISPLAY environment variable specified`, which is exactly how it reached
+    CI: green locally on Windows, red on all three Python versions on Linux.
+
+    Production never builds one bare - `registry.ensure` and `registry.restart`
+    both come from `plan_session` - and this pins the reason, so the next caller
+    that reaches for `StealthSession()` finds out here instead of on a runner.
+    """
+    from invisible_playwright_mcp.session import StealthSession
+
+    assert StealthSession()._kwargs == {}, (
+        "a bare session grew a default again; whatever supplies it is now a "
+        "second place that decides how a browser is launched")
+
+    planned = plan.plan_session(env={}).kwargs
+    assert planned["headless"] is True, (
+        "the planner is the only source of headless, and it stopped saying so")
