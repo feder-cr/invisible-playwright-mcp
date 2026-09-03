@@ -45,7 +45,7 @@ before trusting it:
 claude mcp list
 ```
 
-For Claude Desktop, Cursor and the rest, see **Config file** below.
+For every other client, see **Adding it to your client** below.
 
 ### 2. Run the interface instead
 
@@ -79,9 +79,42 @@ Cached afterwards, and shared with anything else that uses this engine.
 Per-platform sizes are in the
 [engine's README](https://github.com/feder-cr/invisible_playwright).
 
-## Config file
+## Adding it to your client
 
-For any client that takes a JSON block rather than a command:
+Four clients have a command for this. The rest take a config file, and the file
+is not the same everywhere: **three different top-level keys, and one of them is
+not even JSON.** Find yours below.
+
+### If your client has a command
+
+**Claude Code.** `-s user` because the default scope is the current project, so
+without it the tools do not appear anywhere else and nothing reports an error:
+
+```bash
+claude mcp add -s user stealth -- uvx invisible-playwright-mcp
+```
+
+**Codex:**
+
+```bash
+codex mcp add stealth -- uvx invisible-playwright-mcp
+```
+
+**Gemini CLI.** No `--` separator here, unlike the two above:
+
+```bash
+gemini mcp add -s user stealth uvx invisible-playwright-mcp
+```
+
+**VS Code** (GitHub Copilot agent mode):
+
+```bash
+code --add-mcp "{\"name\":\"stealth\",\"command\":\"uvx\",\"args\":[\"invisible-playwright-mcp\"]}"
+```
+
+### If your client takes a config file
+
+**Most use a top-level `mcpServers`** - Claude Desktop, Cursor, Windsurf, Cline:
 
 ```json
 {
@@ -94,16 +127,59 @@ For any client that takes a JSON block rather than a command:
 }
 ```
 
-Where it goes:
-
 | Client | File |
 |---|---|
 | Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Cursor | `~/.cursor/mcp.json`, or `.cursor/mcp.json` in the project |
-| Claude Code | `~/.claude.json`, but use `claude mcp add` above instead |
+| Cursor | `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Cline | `~/.cline/data/settings/cline_mcp_settings.json`, or the **Configure MCP Servers** button in its MCP panel, which opens whichever file your version uses |
 
-Settings from the table below go in the same block, under `env`:
+**Zed calls the key `context_servers`**, not `mcpServers`, in
+`~/.config/zed/settings.json` (`%APPDATA%\Zed\settings.json` on Windows):
+
+```json
+{
+  "context_servers": {
+    "stealth": {
+      "command": "uvx",
+      "args": ["invisible-playwright-mcp"]
+    }
+  }
+}
+```
+
+**VS Code calls it `servers`**, in `.vscode/mcp.json` for a workspace:
+
+```json
+{
+  "servers": {
+    "stealth": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["invisible-playwright-mcp"]
+    }
+  }
+}
+```
+
+**Codex uses TOML**, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.stealth]
+command = "uvx"
+args = ["invisible-playwright-mcp"]
+```
+
+**Continue** uses YAML with its own block format, which changed recently enough
+that we would rather point you at
+[their documentation](https://docs.continue.dev/customize/deep-dives/mcp) than
+print a block here that may already be stale.
+
+### Where a proxy and the other settings go
+
+Everything in **Settings** below goes under `env` on the server entry, in
+whatever shape your client uses:
 
 ```json
 {
@@ -119,6 +195,14 @@ Settings from the table below go in the same block, under `env`:
   }
 }
 ```
+
+In Codex's TOML that is a `[mcp_servers.stealth.env]` table; on the command line,
+Claude Code and Codex take `-e KEY=value` and `--env KEY=value`.
+
+⛔ **"Added" is not "connected".** Every one of these writes a config entry
+without running anything, so a typo, a missing `uv`, or the first-run browser
+download all surface later as a server that will not start. Check before you
+trust it: `claude mcp list`, `codex mcp list`, or your client's MCP panel.
 
 ## Settings
 
