@@ -71,7 +71,47 @@ def _close_sessions_at_exit() -> None:
 atexit.register(_close_sessions_at_exit)
 
 
-mcp = FastMCP("stealth", lifespan=_lifespan)
+# The ladder, stated once. Each tool's own description says what that tool does;
+# nothing said which to REACH FOR FIRST, and a model that cannot find a way down
+# the ladder invents one. Measured 2026-09-02, first run with a real model: it
+# went from "click the select" straight to running `s.value='beta'` as script,
+# skipping the two rungs in between - coordinates, and a screenshot - because
+# nothing had told it they were rungs.
+INSTRUCTIONS = """Drive the page the way a person would. Everything here goes
+through the real pointer and the real keyboard.
+
+Try things in this order. It matters, because a page can tell the difference.
+
+1. A named tool with a selector: browser_click, browser_type,
+   browser_select_option, browser_press_key. browser_snapshot gives you the
+   selector for each element - pass it verbatim, it is built to be unambiguous.
+
+2. Coordinates. browser_snapshot reports `at: [x, y]` for every element it
+   lists, in viewport pixels. browser_click_at takes exactly those and moves the
+   pointer there. This is the rung for anything a selector does not describe: a
+   canvas, a slider, a map, a custom widget built out of divs.
+
+3. Your eyes. browser_take_screenshot, find the thing in the picture, then
+   browser_click_at on where it is. For what the snapshot does not list at all.
+
+4. browser_evaluate, to READ what none of the above can see.
+
+browser_evaluate will not act on the page, and asking it to is refused.
+Assigning to value, checked or selected, or calling click(), dispatchEvent() or
+submit(), skips the keyboard and the pointer: the event arrives with
+isTrusted false, which is the single clearest signal that something other than a
+person is driving, and avoiding it is what this browser is for. When you want
+that, rung 2 or rung 3 is what you actually want.
+
+You do not need script to read state back, either. The snapshot carries
+`checked` for a checkbox or radio and `value` for a select, alongside the text.
+
+If you get to the bottom of the ladder and still cannot do the thing, say so in
+your answer. A task reported as impossible is worth more than a task completed
+in a way that gets the session blocked."""
+
+
+mcp = FastMCP("stealth", instructions=INSTRUCTIONS, lifespan=_lifespan)
 
 
 async def _ensure_session(session_id: str = DEFAULT_SESSION_ID):
@@ -241,6 +281,18 @@ async def browser_type(selector: str, text: str) -> str:
 
 
 @mcp.tool()
+async def browser_select_option(selector: str, value: str) -> str:
+    """Choose an option in a dropdown (`<select>`), by its visible label or by
+    its value.
+
+    Use this rather than clicking the dropdown and pressing arrow keys: a click
+    plus arrows cannot tell you which row it landed on, and setting the value
+    through browser_evaluate changes it without the page seeing a real
+    interaction."""
+    return await actions.select_option(await registry.ensure(), selector, value)
+
+
+@mcp.tool()
 async def browser_press_key(key: str) -> str:
     """Press a key on whatever has focus: "Enter", "Tab", "Escape",
     "ArrowDown", "Control+a", or a single character."""
@@ -249,11 +301,17 @@ async def browser_press_key(key: str) -> str:
 
 @mcp.tool()
 async def browser_evaluate(expression: str) -> str:
-    """Run a JavaScript expression in the page and return the result as JSON.
+    """READ from the page with JavaScript and get the result as JSON.
 
-    The escape hatch for what the other tools do not cover: reading a computed
-    style, a value held in a framework's state, or the length of a list. Prefer
-    a named tool when one fits, because this one can change the page."""
+    For what the other tools cannot see: a computed style, a value held in a
+    framework's state, the length of a list.
+
+    It will not act. Assigning to `value`, `checked` or `selected`, or calling
+    `click()`, `dispatchEvent()` or `submit()`, is refused - those change the
+    page without a real keystroke or pointer, and a page can tell. Use
+    browser_click, browser_type or browser_select_option instead; they do the
+    same thing through the pointer and the keyboard. Reading any of those
+    properties is fine."""
     return await actions.evaluate(await registry.ensure(), expression)
 
 

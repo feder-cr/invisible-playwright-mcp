@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "invisible-playwright-mcp"
-version = "0.9.0"
+version = "0.10.0"
 description = "Stealth Firefox browser as an MCP server for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,7 +14,12 @@ keywords = ["mcp", "playwright", "firefox", "stealth", "anti-detect", "browser-a
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+    # NOT OS Independent, and the difference is visible on the PyPI page.
+    # The engine publishes binaries for these two only - macOS has had none
+    # since firefox-21 - so a mac reader was being told on the index that this
+    # package supported them, and found out at the first browser call.
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Topic :: Internet :: WWW/HTTP :: Browsers",
     "Topic :: Software Development :: Testing",
 ]

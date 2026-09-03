@@ -83,8 +83,12 @@ def _listed_tools() -> set:
 
 
 def test_the_readme_names_every_tool_the_server_registers():
-    """A tool nobody can find is a tool nobody uses. This is how the fourteenth
-    was noticed, and by hand."""
+    """A tool nobody can find is a tool nobody uses.
+
+    That is how the last two were noticed - one by hand, and one because a model
+    with no way to set a dropdown clicked it, pressed arrow keys, and finally
+    injected script to set the value. An undocumented tool and a missing one
+    look the same from where the model sits."""
     import asyncio
 
     from invisible_playwright_mcp import server

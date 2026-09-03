@@ -15,6 +15,7 @@ acts on it.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from . import clean
@@ -198,6 +199,13 @@ SNAPSHOT_JS = """() => {
     // is controlled instead is the weight of each element: measured on real
     // pages, href alone was 46% of the payload, so what gets dropped is what
     // carries no information rather than what happens to come last.
+    // What a <select> is SET TO, which is the one thing its text cannot say:
+    // innerText on a menu is every option concatenated, so a country picker
+    // reads the same before and after it is chosen.
+    function chosen(el) {
+        return [...el.selectedOptions].map(o => o.text).join(', ');
+    }
+
     function useful(h) {
         if (!h) return undefined;
         if (h === '#' || h.startsWith('javascript:')) return undefined;
@@ -282,7 +290,9 @@ SNAPSHOT_JS = """() => {
         seen.add(el);
         if (!shown(el)) continue;
         const r = el.getBoundingClientRect();
-        const text = (el.innerText || el.value || '').trim().replace(/\\s+/g, ' ').slice(0, 60);
+        const isSel = el.tagName === 'SELECT';
+        const isBox = el.type === 'checkbox' || el.type === 'radio';
+        const text = (isSel ? chosen(el) : (el.innerText || el.value || '')).trim().replace(/\\s+/g, ' ').slice(0, 60);
         const href = el.tagName === 'A' ? useful(el.getAttribute('href')) : undefined;
 
         const e = { tag: el.tagName.toLowerCase() };
@@ -308,6 +318,14 @@ SNAPSHOT_JS = """() => {
         if (el.placeholder) e.placeholder = el.placeholder;
         if (el.getAttribute('aria-label')) e.label = el.getAttribute('aria-label');
         if (text) e.text = text;
+        // THE CURRENT STATE, and it is here because of what its absence caused.
+        // A model asked to tick a box and pick an option could see neither, so
+        // it read them the only way left to it - by injecting script - and then
+        // wrote them back the same way. A gap in what the caller can SEE is
+        // answered with evaluate() just as surely as a gap in what it can DO,
+        // and a value set from script is not a trusted event.
+        if (isBox) e.checked = el.checked;
+        if (isSel) e.value = el.value;
         // Centre coordinates in the viewport, so browser_click_at can reach
         // what no selector describes.
         e.at = [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];
@@ -463,10 +481,108 @@ async def type_text(session, selector: str, text: str) -> str:
     return f"typed into {selector}"
 
 
+async def select_option(session, selector: str, value: str) -> str:
+    """Choose an option in a `<select>`, by its value OR by its visible label.
+
+    ⛔ IT EXISTS BECAUSE ITS ABSENCE PUSHED MODELS INTO A DETECTABLE WORKAROUND.
+    Measured on a four-field form: with no way to set a select, the model clicked
+    it, pressed ArrowDown twice hoping to land on the right row, could not tell
+    whether it had, and finally set `select.value` through `browser_evaluate`.
+    That last step is script injection into the page - it skips the humanised
+    path entirely and produces a change the site never saw a real interaction
+    for. A missing tool is not a neutral gap: the model routes around it, and the
+    route it finds is worse than the tool would have been.
+
+    BOTH value and label, tried in that order, because a model reads the page and
+    what a page shows is the LABEL. Asking it for the `value` attribute means
+    asking it to read markup it may never have fetched, and a tool that needs the
+    caller to know a hidden attribute is a tool that gets used wrong.
+    """
+    page = session.page()
+    try:
+        chosen = await page.select_option(selector, value=value, timeout=15_000)
+        if chosen:
+            return f"selected {selector} by value: {chosen}"
+    except Exception:
+        # Not an error yet: `value` may well have been a label. The second
+        # attempt is what decides, and its failure is the one worth reporting.
+        pass
+    chosen = await page.select_option(selector, label=value, timeout=15_000)
+    if not chosen:
+        # Playwright answers with an empty list rather than raising when nothing
+        # matched, so a caller reading only the exception would believe it had
+        # worked and go on to submit a form that never changed.
+        raise RuntimeError(
+            f"no option in {selector} has the value or the label {value!r}")
+    return f"selected {selector} by label: {chosen}"
+
+
 async def press_key(session, key: str) -> str:
     await session.page().keyboard.press(key)
     return f"pressed {key}"
 
 
+# ── evaluate, and the one thing it must not be used for ─────────────────────
+#
+# ⛔ THIS PACKAGE EXISTS SO THAT INTERACTION LOOKS REAL, AND A VALUE SET FROM
+# SCRIPT IS THE OPPOSITE OF THAT. `el.value = 'beta'` changes the field without
+# a keystroke, without focus, without a trusted event; `el.click()` fires a
+# handler with `isTrusted === false`, which is one property read away from being
+# the clearest bot signal a page can collect. Every other tool here goes through
+# the humanised path - approach, hover, press, release - and this one would go
+# around it.
+#
+# It is not a hypothetical. Measured 2026-09-02, first run with a real model:
+# asked to pick an option from a dropdown, with no tool that could, it clicked
+# the select, pressed ArrowDown twice, and then ran `s.value='beta'` through
+# here. The model was not being careless - it was routing around a gap, which is
+# what a capable model does. The gap is the defect; this refusal is what makes
+# the gap visible instead of silently detectable.
+#
+# So the fix is in two halves and both are needed. The gaps are closed
+# (`browser_select_option` exists, and the snapshot reports `checked` and the
+# selected `value`, which is what sent it here to READ in the first place), and
+# the shortcut is refused with the name of the tool to use instead. Closing the
+# gaps alone leaves the shortcut for the next gap; refusing alone leaves the
+# model stuck with a task it can see how to finish.
+#
+# ⛔ AND THIS IS A PATTERN CHECK, NOT A SANDBOX. JavaScript has unlimited ways
+# to say the same thing and this catches the ones a model actually writes. It is
+# a guardrail on the obvious road, not a wall around the field, and it must not
+# be described as one anywhere.
+_BY_SCRIPT = (
+    (re.compile(r"""\.(?:value|checked|selected)\s*\+?=(?!=)"""),
+     "browser_type for a text field, browser_select_option for a dropdown, "
+     "browser_click for a checkbox or a radio"),
+    (re.compile(r"""\[\s*['"](?:value|checked|selected)['"]\s*\]\s*\+?=(?!=)"""),
+     "browser_type for a text field, browser_select_option for a dropdown, "
+     "browser_click for a checkbox or a radio"),
+    (re.compile(r"""\.click\s*\("""),
+     "browser_click, or browser_click_at when no selector describes the target"),
+    (re.compile(r"""\.dispatchEvent\s*\("""),
+     "browser_click, browser_type or browser_press_key - whichever interaction you are synthesising, there is a tool that produces it for real"),
+    (re.compile(r"""\.submit\s*\("""),
+     "browser_click on the form's submit button"),
+)
+
+
+def _refuse_script_interaction(expression: str) -> None:
+    for pattern, instead in _BY_SCRIPT:
+        if pattern.search(expression):
+            raise ValueError(
+                "refused: this changes the page from script, which produces an "
+                "untrusted event and is exactly what this browser exists to "
+                "avoid. Use " + instead + ". Reading is fine - it is assigning "
+                "and calling that is refused. If no tool fits, say so in your "
+                "answer rather than working around it.")
+
+
 async def evaluate(session, expression: str) -> str:
+    """Read from the page. Acting on it goes through the named tools.
+
+    The refusal is deliberately narrow: it looks at what is being ASSIGNED or
+    CALLED, so `el.value` reads and `el.value === 'x'` comparisons pass, and
+    only `el.value = 'x'` does not.
+    """
+    _refuse_script_interaction(expression)
     return json_capped(await session.page().evaluate(expression))
