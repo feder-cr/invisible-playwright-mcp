@@ -30,16 +30,13 @@ happen, there is an interface that brings a model too.
 
 ### 1. Add it to the assistant you have
 
-**This package.** Your assistant brings the model.
-
-Claude Code, once for every project on the machine:
+Claude Code:
 
 ```bash
 claude mcp add -s user stealth -- uvx invisible-playwright-mcp
 ```
 
-Drop `-s user` if you want it in the current project only. Then check it took,
-before trusting it:
+Then check it took, before trusting it:
 
 ```bash
 claude mcp list
@@ -49,7 +46,7 @@ For every other client, see **Adding it to your client** below.
 
 ### 2. Run the interface instead
 
-**[AIHawk](https://github.com/feder-cr/AIHawk).** No assistant needed. Bring an
+**[AIHawk](https://github.com/feder-cr/AIHawk).** Bring an
 [OpenRouter](https://openrouter.ai) account and its key, get a page with the chat
 on the left and the live browser on the right.
 
