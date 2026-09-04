@@ -33,7 +33,7 @@ happen, there is an interface that brings a model too.
 Claude Code:
 
 ```bash
-claude mcp add -s user stealth -- uvx invisible-playwright-mcp
+claude mcp add --scope user stealth -- uvx invisible-playwright-mcp
 ```
 
 Then check it took, before trusting it:
@@ -84,11 +84,11 @@ not even JSON.** Find yours below.
 
 ### If your client has a command
 
-**Claude Code.** `-s user` because the default scope is the current project, so
+**Claude Code.** `--scope user` because the default scope is the current project, so
 without it the tools do not appear anywhere else and nothing reports an error:
 
 ```bash
-claude mcp add -s user stealth -- uvx invisible-playwright-mcp
+claude mcp add --scope user stealth -- uvx invisible-playwright-mcp
 ```
 
 **Codex:**
@@ -100,7 +100,7 @@ codex mcp add stealth -- uvx invisible-playwright-mcp
 **Gemini CLI.** No `--` separator here, unlike the two above:
 
 ```bash
-gemini mcp add -s user stealth uvx invisible-playwright-mcp
+gemini mcp add --scope user stealth uvx invisible-playwright-mcp
 ```
 
 **VS Code** (GitHub Copilot agent mode):
