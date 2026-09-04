@@ -55,6 +55,18 @@ Repository = "https://github.com/feder-cr/invisible-playwright-mcp"
 packages = ["src/invisible_playwright_mcp"]
 
 [tool.pytest.ini_options]
+# ⛔ SO A CHECKOUT GATES ITSELF. Without this, pytest imports whatever the
+# interpreter's installation points at, which is not necessarily this tree:
+# measured 2026-08-29 on a sibling package, an editable install resolved to a
+# SECOND working copy of the same repository on an older branch, and a fix
+# just written did not move the test exercising it because the code under test
+# was somewhere else. The cost that day was low by luck - the two copies
+# differed by a whole subpackage, so collection exploded instead of running
+# green on code nobody had written there.
+#
+# Resolved against this pyproject.toml, so every checkout points at itself.
+# The two older packages took this remedy then; these two never did.
+pythonpath = ["src"]
 testpaths = ["tests"]
 markers = ["e2e: starts real processes (a server and a browser); skipped when no server is listening"]
 asyncio_mode = "auto"
