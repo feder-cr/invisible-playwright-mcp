@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import sys
 
 import pytest
@@ -63,8 +64,22 @@ async def _fingerprint(mcp) -> dict:
 
 
 def _server():
+    """The server under test is THIS checkout, not whatever is installed.
+
+    ⛔ `pythonpath` in the pytest config does not reach here. The server runs as
+    a SUBPROCESS, and a subprocess gets its own sys.path, so without this the
+    test drives the copy in site-packages while standing in the checkout - the
+    same defect `pythonpath` was added to close, one layer further out.
+
+    It passed anyway when this was written, because the venv in use happened to
+    hold an editable install pointing at this tree. That is luck of the venv,
+    not a property of the test, and on a machine with an ordinary install the
+    mutations that validated this file would have gone uncaught.
+    """
     env = dict(os.environ)
     env.setdefault("STEALTHFOX_HEADLESS", "1")
+    src = str(pathlib.Path(__file__).resolve().parents[1] / "src")
+    env["PYTHONPATH"] = src + os.pathsep + env.get("PYTHONPATH", "")
     return StdioServerParameters(
         command=sys.executable, args=["-m", "invisible_playwright_mcp"], env=env)
 
