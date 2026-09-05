@@ -13,8 +13,10 @@ when a client disconnects.
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Dict, Optional
 
+from .prefetch import EnginePrefetch
 from .session import StealthSession
 
 # The id used by callers that do not ask for one. Existing stdio clients send no
@@ -63,6 +65,9 @@ class SessionRegistry:
         #: DIFFERENT page instead of nothing. See `_adopt_numbering`.
         self._tabs: Dict[str, int] = {}
         self._locks: Dict[str, asyncio.Lock] = {}
+        #: The engine download started with the process, which every launch
+        #: below waits for. See prefetch.py for why the wait is not optional.
+        self.prefetch = EnginePrefetch()
 
     def _default_config(self) -> dict:
         # Late import: the planner reads config and identity, which have no
@@ -71,6 +76,25 @@ class SessionRegistry:
             return self._defaults()
         from .plan import plan_session
         return plan_session().kwargs
+
+    def prefetch_engine(self, fetch=None, env=None) -> bool:
+        """Start downloading the engine now, so the first tool call does not.
+
+        Skipped when the environment names a binary (`STEALTHFOX_BINARY`): a
+        given executable never goes through the download path, and fetching
+        the sealed engine next to it would spend a quarter gigabyte on
+        something the launch will not use. The variable is read through the
+        planner's own reader, so this and the plan cannot disagree about where
+        a binary comes from. A download that fails to start is reported by
+        the first page instead, exactly as it was before this existed.
+        """
+        from .plan import binary_path_in
+        if binary_path_in(os.environ if env is None else env):
+            return False
+        if fetch is None:
+            from invisible_core import ensure_binary
+            fetch = ensure_binary
+        return self.prefetch.start(fetch)
 
     def config(self, session_id: str = DEFAULT_SESSION_ID) -> Optional[dict]:
         """What this id was started with, for callers that have to report it."""
@@ -134,6 +158,7 @@ class SessionRegistry:
                     config = self._default_config()
                 session = self._factory(**config)
                 self._adopt_numbering(session_id, session)
+                await self.prefetch.wait()
                 await session.start()
                 self._sessions[session_id] = session
                 self._configs[session_id] = config
@@ -158,6 +183,7 @@ class SessionRegistry:
             await self._discard(session_id)
             session = self._factory(**kwargs)
             self._adopt_numbering(session_id, session)
+            await self.prefetch.wait()
             try:
                 await session.start()
             except Exception as exc:

@@ -162,6 +162,17 @@ def _describe_exit(proxy: Optional[dict], explicit: Optional[str],
     return proxy["server"]
 
 
+def binary_path_in(env: Mapping[str, str]) -> Optional[str]:
+    """The executable the environment names, if any.
+
+    The one reader of STEALTHFOX_BINARY. The plan asks here to decide the
+    launch, and the engine prefetch asks here to decide whether there is
+    anything to download, so the two cannot disagree about where a binary
+    comes from.
+    """
+    return env.get("STEALTHFOX_BINARY") or None
+
+
 def plan_session(seed: Optional[int] = None, proxy: Optional[str] = None,
                  profile: Optional[str] = None,
                  env: Optional[Mapping[str, str]] = None) -> SessionPlan:
@@ -202,8 +213,9 @@ def plan_session(seed: Optional[int] = None, proxy: Optional[str] = None,
         "seed": chosen_seed,
         "headless": env.get("STEALTHFOX_HEADLESS", "1") != "0",
     }
-    if env.get("STEALTHFOX_BINARY"):
-        kwargs["binary_path"] = env["STEALTHFOX_BINARY"]
+    binary = binary_path_in(env)
+    if binary:
+        kwargs["binary_path"] = binary
     if chosen_proxy is not None:
         kwargs["proxy"] = chosen_proxy
     if directory is not None:

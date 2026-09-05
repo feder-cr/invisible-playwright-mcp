@@ -1,7 +1,9 @@
 """MCP server exposing browser_* tools over stealth sessions.
 
 Tool names mirror the Microsoft Playwright MCP so prompts stay portable.
-Config comes from STEALTHFOX_* env vars; a session starts lazily on first use.
+Config comes from STEALTHFOX_* env vars; a session starts lazily on first use,
+and the engine it needs starts downloading with the process (prefetch.py), so
+that first use finds it on disk instead of fetching it while a model waits.
 
 Every tool here is a wrapper. The operations live in `actions.py` and the
 sessions live in `registry.py`, so every client drives the browser through
@@ -62,6 +64,9 @@ def _close_sessions_at_exit() -> None:
     tree of processes, and an orphaned one goes on holding its profile
     directory and its port.
     """
+    # A download still in flight is stopped first: killed with the interpreter
+    # it would leave its half-written archive behind (prefetch.py, `abandon`).
+    registry.prefetch.abandon()
     try:
         asyncio.run(registry.close_all())
     except Exception:
@@ -432,6 +437,9 @@ async def browser_evaluate(expression: str) -> str:
 
 
 def main() -> None:
+    # The engine download starts here, with the process, and not inside the
+    # first tool call that needs a page. Every launch waits for it: prefetch.py.
+    registry.prefetch_engine()
     transport = os.environ.get("STEALTHFOX_MCP_TRANSPORT", "stdio").strip().lower()
     if transport in ("http", "streamable-http"):
         # streamable-http ships with the `mcp` package, which already requires
