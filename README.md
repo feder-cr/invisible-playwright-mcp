@@ -59,20 +59,21 @@ Open **http://127.0.0.1:8765**.
 It is a client of this server like any other, with no private path to the page -
 which is the reason to believe the tools below are enough to build on.
 
-## The download nobody warns you about
+## The browser downloads itself
 
-The browser is about a quarter of a gigabyte and it is **not** fetched when the
-server is installed, nor when it starts. It arrives on the **first tool call that
-needs a page**, so the first thing you ask your assistant to do sits there, and on
-a slow connection you get a timeout that says nothing about a download.
+The browser is about a quarter of a gigabyte and it is **not** inside the
+package. The server starts fetching it the moment it starts. Claude Code starts
+its servers when a session opens, so there the engine is usually on disk before
+you have finished typing your first request; a client that starts the server at
+the first request has that request wait for the download, and nothing else
+happens. Cached afterwards, and shared with anything else that uses this engine.
 
-Get it over with first, in a terminal where you can watch it:
+To have it on disk before any of that, in a Docker image or a CI cache:
 
 ```bash
-uvx invisible-playwright fetch
+invisible-playwright fetch
 ```
 
-Cached afterwards, and shared with anything else that uses this engine.
 Per-platform sizes are in the
 [engine's README](https://github.com/feder-cr/invisible_playwright).
 
